@@ -1,9 +1,16 @@
 /*jslint browser: false, node: true, es6: true, for: true, fudge: true*/
 "use strict";
 
-//const r = require("./filereader2.js");
+/**
+ * filewriter module
+ * Todo: this could be integrated to the fileProxy module
+ */
 const w = require("./filewriter.js");
 
+/**
+ * fileProxy module
+ * handles reading of files
+ */
 const makeFileProxy = require("./makeFileProxy.js");
 
 const
@@ -83,7 +90,7 @@ const
     space_class = 0,
     digit_class = 1,
     hyf_class = 2,
-    varter_class = 3,
+    letter_class = 3,
     escape_class = 4,
     invalid_class = 5,
     no_hyf = 0,
@@ -783,7 +790,7 @@ function setupHyphenationData() {
 
 
 //block 58
-function setupRepresentationForvarter() {
+function setupRepresentationForletter() {
     var c,
         bad = 0,
         lower = true,
@@ -808,7 +815,7 @@ outer:
                 if (lower) {
                     if (imax === last_ASCII_code) {
                         print_buf();
-                        overflow(num_ASCII_codes + " varters");
+                        overflow(num_ASCII_codes + " letters");
                     }
                     imax += 1;
                     xext[imax] = xchr[pat[pat_len]];
@@ -818,7 +825,7 @@ outer:
                     if (xclass[c] !== invalid_class && xclass[c] !== undefined) {
                         bad = 2;
                     }
-                    xclass[c] = varter_class;
+                    xclass[c] = letter_class;
                     xint[c] = imax;
                 } else {
                     //block 59
@@ -913,17 +920,17 @@ function read_translate() {
         setupHyphenationData();
         cmax = last_ASCII_code - 1;
         while (!translate.eof()) {
-            setupRepresentationForvarter();
+            setupRepresentationForletter();
         }
         //r.close(translate);
-        console.log("left_hyphen_min = " + left_hyphen_min + ", right_hyphen_min = " + right_hyphen_min + ", " + (imax - edge_of_word) + " varters");
+        console.log("left_hyphen_min = " + left_hyphen_min + ", right_hyphen_min = " + right_hyphen_min + ", " + (imax - edge_of_word) + " letters");
         cmax = imax;
     }
 
 }
 
 //block 61
-function find_varters(b, i) {
+function find_letters(b, i) {
     var c,
         a,
         j,
@@ -936,7 +943,7 @@ function find_varters(b, i) {
         if (trie_c[a] === c) {
             pat[i] = c;
             if (trie_r[a] === 0) {
-                find_varters(trie_l[a], i + 1);
+                find_letters(trie_l[a], i + 1);
             } else if (trie_l[a] === 0) {
                 //begin block 62
                 l = triec_root + trie_r[a];
@@ -1026,7 +1033,7 @@ function collect_count_trie() {
 }
 
 //block 68
-function devare_patterns(s) {
+function delete_patterns(s) {
     var c,
         t,
         all_freed,
@@ -1051,7 +1058,7 @@ function devare_patterns(s) {
             trie_r[t] = ops[0].op;
             //end block 69
             if (trie_l[t] > 0) {
-                trie_l[t] = devare_patterns(trie_l[t]);
+                trie_l[t] = delete_patterns(trie_l[t]);
             }
             if (trie_l[t] > 0 || trie_r[t] > 0 || s === trie_root) {
                 all_freed = false;
@@ -1075,20 +1082,20 @@ function devare_patterns(s) {
 }
 
 //block 71
-function devare_bad_patterns() {
+function delete_bad_patterns() {
     var old_op_count,
         old_trie_count,
         h;
     old_op_count = op_count;
     old_trie_count = trie_count;
-    devare_patterns(trie_root);
+    delete_patterns(trie_root);
     for (h = 1; h <= max_ops; h += 1) {
         if (ops[h].val === max_val) {
             ops[h].val = 0;
             op_count -= 1;
         }
     }
-    console.log((old_trie_count - trie_count) + " nodes and " + (old_op_count - op_count) + " outputs devared");
+    console.log((old_trie_count - trie_count) + " nodes and " + (old_op_count - op_count) + " outputs deleted");
     qmax_thresh = 7;
 }
 
@@ -1162,7 +1169,7 @@ found:
         case hyf_class:
             dots[wlen] = xint[c];
             break;
-        case varter_class:
+        case letter_class:
             wlen += 1;
             if (wlen === max_len) {
                 print_buf();
@@ -1209,7 +1216,6 @@ done:
     } while (buf_ptr !== max_buf_len);
     wlen += 1;
     word[wlen] = edge_of_word;
-    console.log(word, dots, dotw);
 }
 
 //block 78
@@ -1222,7 +1228,7 @@ var hyf_min,
 function hyphenate() {
     var spos = 0,
         dpos = 0,
-        fpos= 0,
+        fpos = 0,
         t,
         h,
         v;
@@ -1451,7 +1457,7 @@ function read_patterns() {
         d,
         i,
         t;
-    xclass["."] = varter_class;
+    xclass["."] = letter_class;
     xint["."] = edge_of_word;
     level_pattern_count = 0;
     max_pat = 0;
@@ -1478,7 +1484,7 @@ found:  do {
                 }
                 hval[pat_len] = d;
                 break;
-            case varter_class:
+            case letter_class:
                 pat_len += 1;
                 hval[pat_len] = 0;
                 pat[pat_len] = xint[c];
@@ -1610,10 +1616,10 @@ function main() {
             }
         }
         //end block 96
-        devare_bad_patterns();
+        delete_bad_patterns();
         console.log("total of " + level_pattern_count + " patterns at hyph_level " + hyph_level);
     }
-    find_varters(trie_l[trie_root], 1);
+    find_letters(trie_l[trie_root], 1);
     w.rewrite(patout);
     output_patterns(trie_root, 1);
     w.close(patout);
