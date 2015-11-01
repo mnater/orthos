@@ -17,8 +17,7 @@ const
     dictionary = makeFileProxy(process.argv[2]),
     patterns = makeFileProxy(process.argv[3]),
     patout = process.argv[4],
-    translate = makeFileProxy(process.argv[5]),
-    run_count = parseInt(process.argv[6], 10);
+    translate = makeFileProxy(process.argv[5]);
 
 //block 1
 const banner = "This is patgen.js for node.js, Version 1.0b";
@@ -1540,94 +1539,208 @@ found:  do {
 }
 
 //block 95
-var i,
-    j,
+var j,
     k,
     dot1,
     more_this_level = [];
 
 
 //block 94
-function main() {
+
+
+function generateLevel() {
+    //generate a level 96
+    for (k = 0; k <= max_dot; k += 1) {
+        more_this_level[k] = true;
+    }
+    for (j = pat_start; j <= pat_finish; j += 1) {
+        pat_len = j;
+        pat_dot = ~~(pat_len / 2); //integer division
+        dot1 = pat_dot * 2;
+        do {
+            pat_dot = dot1 - pat_dot;
+            dot1 = pat_len * 2 - dot1 - 1;
+            if (more_this_level[pat_dot]) {
+                console.time("do_dictionary");
+                do_dictionary();
+                console.timeEnd("do_dictionary");
+                collect_count_trie();
+                more_this_level[pat_dot] = more_to_come;
+            }
+        } while (pat_dot !== pat_len);
+        for (k = max_dot; k <= 1; k -= 1) {
+            if (!more_this_level[k - 1]) {
+                more_this_level[k] = false;
+            }
+        }
+    }
+    //end block 96
+    delete_bad_patterns();
+    console.log("total of " + level_pattern_count + " patterns at hyph_level " + hyph_level);
+}
+
+function askDoDictionary() {
+    var readline = require('readline'),
+        rl = readline.createInterface(process.stdin, process.stdout);
+    rl.setPrompt('hyphenate word list? ');
+    rl.prompt();
+
+    rl.on('line', function (line) {
+        var chunk = line.trim();
+        if (chunk === "y" || chunk === "Y") {
+            rl.close();
+            do_dictionary();
+        } else {
+            process.exit(0);
+        }
+    });
+}
+
+function doLevels(currLevel) {
+    hyph_level = max_pat;
+    if (currLevel <= hyph_finish) {
+        hyph_level = currLevel;
+        level_pattern_count = 0;
+        if (hyph_level > hyph_start) {
+            console.log(" ");
+        } else if (hyph_start <= max_pat) {
+            console.log("Largest hyphenation value " + max_pat + " in patterns should be less than hyph_start");
+        }
+        getPat(hyph_level);
+    } else {
+        find_letters(trie_l[trie_root], 1);
+        w.rewrite(patout);
+        output_patterns(trie_root, 1);
+        w.close(patout);
+        //block 97
+        procesp = false;
+        hyphp = true;
+        askDoDictionary();
+    }
+}
+
+function getGBT(currLevel) {
+    var readline = require('readline'),
+        rl = readline.createInterface(process.stdin, process.stdout),
+        n1,
+        n2,
+        n3;
+    rl.setPrompt('good weight, bad weight, threshold: ');
+    rl.prompt();
+
+    rl.on('line', function (line) {
+        var chunks = line.trim().split(" ");
+        if (chunks.length >= 3) {
+            n1 = parseInt(chunks[0], 10);
+            n2 = parseInt(chunks[1], 10);
+            n3 = parseInt(chunks[2], 10);
+            rl.pause();
+        } else if (chunks.length === 1) {
+            if (n1 === undefined) {
+                n1 = parseInt(chunks[0], 10);
+            } else if (n2 === undefined) {
+                n2 = parseInt(chunks[0], 10);
+            } else {
+                n3 = parseInt(chunks[0], 10);
+                rl.pause();
+            }
+        }
+    }).on('pause', function () {
+        if (n1 >= 1 && n2 >= 1 && n3 >= 1) {
+            good_wt = n1;
+            bad_wt = n2;
+            thresh = n3;
+            rl.close();
+            generateLevel();
+            doLevels(currLevel + 1);
+        } else {
+            console.log("Specify good weight, bad weight, threshold>=1 !");
+            getGBT(currLevel);
+        }
+    });
+}
+
+function getPat(currLevel) {
+    var readline = require('readline'),
+        rl = readline.createInterface(process.stdin, process.stdout),
+        n1,
+        n2;
+    rl.setPrompt('pat_start, pat_finish: ');
+    rl.prompt();
+
+    rl.on('line', function (line) {
+        var chunks = line.trim().split(" ");
+        if (chunks.length >= 2) {
+            n1 = parseInt(chunks[0], 10);
+            n2 = parseInt(chunks[1], 10);
+            rl.pause();
+        } else if (chunks.length === 1) {
+            if (n1 === undefined) {
+                n1 = parseInt(chunks[0], 10);
+            } else {
+                n2 = parseInt(chunks[0], 10);
+                rl.pause();
+            }
+        }
+    }).on('pause', function () {
+        if (n1 >= 1 && n1 <= n2 && n2 <= max_dot) {
+            pat_start = n1;
+            pat_finish = n2;
+            rl.close();
+            getGBT(currLevel);
+        } else {
+            console.log("Specify 1<=pat_start<=pat_finish<=" + max_dot + " !");
+            getPat(currLevel);
+        }
+    });
+}
+
+
+
+
+function getHyph() {
+    var readline = require('readline'),
+        rl = readline.createInterface(process.stdin, process.stdout),
+        n1,
+        n2;
+    rl.setPrompt('hyph_start, hyph_finish: ');
+    rl.prompt();
+
+    rl.on('line', function (line) {
+        var chunks = line.trim().split(" ");
+        if (chunks.length >= 2) {
+            n1 = parseInt(chunks[0], 10);
+            n2 = parseInt(chunks[1], 10);
+            rl.pause();
+        } else if (chunks.length === 1) {
+            if (n1 === undefined) {
+                n1 = parseInt(chunks[0], 10);
+            } else {
+                n2 = parseInt(chunks[0], 10);
+                rl.pause();
+            }
+        }
+    }).on('pause', function () {
+        if (n1 >= 1 && n1 < max_val && n2 >= 1 && n2 < max_val) {
+            hyph_start = n1;
+            hyph_finish = n2;
+            rl.close();
+            doLevels(hyph_start);
+        } else {
+            console.log("Specify 1<=hyph_start,hyph_finish<=" + (max_val - 1) + " !");
+            getHyph();
+        }
+    });
+}
+
+function main() {
     initialize();
     init_pattern_trie();
     read_translate();
     read_patterns();
     procesp = true;
     hyphp = false;
-    //instead of user inputs we use a settings file
-    const sets = require("./settings.js");
-    if (sets.run[run_count].hyph_start >= 1 && sets.run[run_count].hyph_start < max_val && sets.run[run_count].hyph_finish >= 1 && sets.run[run_count].hyph_finish < max_val) {
-        hyph_start = sets.run[run_count].hyph_start;
-        hyph_finish = sets.run[run_count].hyph_finish;
-    } else {
-        console.log("Specifiy 1<=hyph_start,hyph_finish<=" + (max_val - 1) + " !");
-    }
-    hyph_level = max_pat;
-    for (i = hyph_start; i <= hyph_finish; i += 1) {
-        hyph_level = i;
-        level_pattern_count = 0;
-        if (hyph_level > hyph_start) {
-            console.log(" ");
-        } else {
-            if (hyph_start <= max_pat) {
-                console.log("Largest hyphenation value " + max_pat + " in patterns should be less than hyphen_start");
-            }
-        }
-        if (sets.run[run_count].pat_start >= 1 && sets.run[run_count].pat_start <= sets.run[run_count].pat_finish && sets.run[run_count].pat_finish <= max_dot) {
-            pat_start = sets.run[run_count].pat_start;
-            pat_finish = sets.run[run_count].pat_finish;
-        } else {
-            console.log("Specifiy 1<=pat_start<=pat_finish<=" + max_dot + " !");
-        }
-        if (sets.run[run_count].good >= 1 && sets.run[run_count].bad >= 1 && sets.run[run_count].thresh >= 1) {
-            good_wt = sets.run[run_count].good;
-            bad_wt = sets.run[run_count].bad;
-            thresh = sets.run[run_count].thresh;
-        } else {
-            console.log("Specifiy good weight, bad weight, threshold>=1 !");
-        }
-        console.log("hyph_start, hyph_finish: " + hyph_start + " " + hyph_finish);
-        console.log("pat_start, pat_finish: " + pat_start + " " + pat_finish);
-        console.log("good weight, bad weight, threshold: " + good_wt + " " + bad_wt + " " + thresh);
-        //generate a level 96
-        for (k = 0; k <= max_dot; k += 1) {
-            more_this_level[k] = true;
-        }
-        for (j = pat_start; j <= pat_finish; j += 1) {
-            pat_len = j;
-            pat_dot = ~~(pat_len / 2); //integer division
-            dot1 = pat_dot * 2;
-            do {
-                pat_dot = dot1 - pat_dot;
-                dot1 = pat_len * 2 - dot1 - 1;
-                if (more_this_level[pat_dot]) {
-                    console.time("do_dictionary");
-                    do_dictionary();
-                    console.timeEnd("do_dictionary");
-                    collect_count_trie();
-                    more_this_level[pat_dot] = more_to_come;
-                }
-            } while (pat_dot !== pat_len);
-            for (k = max_dot; k <= 1; k -= 1) {
-                if (!more_this_level[k - 1]) {
-                    more_this_level[k] = false;
-                }
-            }
-        }
-        //end block 96
-        delete_bad_patterns();
-        console.log("total of " + level_pattern_count + " patterns at hyph_level " + hyph_level);
-    }
-    find_letters(trie_l[trie_root], 1);
-    w.rewrite(patout);
-    output_patterns(trie_root, 1);
-    w.close(patout);
-    //block 97
-    procesp = false;
-    hyphp = true;
-    console.log("hyphenate word list? Y");
-    do_dictionary();
+    getHyph();
 }
 
 main();
