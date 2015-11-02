@@ -1,26 +1,79 @@
 /*jslint browser: false, node: true, es6: true, for: true, fudge: true*/
 "use strict";
 
-/**
- * filewriter module
- * Todo: this could be integrated to the fileProxy module
- */
-const w = require("./filewriter.js");
+var fs = require("fs");
 
-/**
- * fileProxy module
- * handles reading of files
- */
-const makeFileProxy = require("./makeFileProxy.js");
+var File = function (content) {
+    this.ptr = 0;
+    this.content = content;
+};
 
-const
-    dictionary = makeFileProxy(process.argv[2]),
-    patterns = makeFileProxy(process.argv[3]),
-    patout = process.argv[4],
-    translate = makeFileProxy(process.argv[5]);
+File.prototype = {
+    eof: function () {
+        return this.ptr === this.content.length;
+    },
+    reset: function () {
+        this.ptr = 0;
+    },
+    read: function () {
+        var r = this.content.charAt(this.ptr);
+        this.ptr += 1;
+        return r;
+    },
+    write: function (data) {
+        this.content += data;
+    },
+    save: function (path) {
+        var that = this;
+        return new Promise(function (resolve, reject) {
+            fs.writeFile(path, that.content, function (err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            });
+        });
+    }
+
+};
+
+function readFilePromise(path) {
+    return new Promise(function (resolve, reject) {
+        fs.readFile(path, "utf8", function (err, data) {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(data);
+            }
+        });
+    });
+}
+
+var dictionaryProm = readFilePromise(process.argv[2]),
+    patternInProm = readFilePromise(process.argv[3]),
+    translateProm = readFilePromise(process.argv[5]),
+    patout = new File(""),
+    dictionary,
+    patterns,
+    translate;
+
+Promise.all([dictionaryProm, patternInProm, translateProm]).then(
+    function (values) {
+        dictionary = new File(values[0]);
+        patterns = new File(values[1]);
+        translate = new File(values[2]);
+        main();
+    }
+).catch(
+    function (values) {
+        console.log(values);
+    }
+);
+
 
 //block 1
-const banner = "This is patgen.js for node.js, Version 1.0b";
+var banner = "This is patgen.js for node.js, Version 1.0b";
 
 //block 3
 function print(s) {
@@ -54,7 +107,7 @@ const
     last_ASCII_code = 255;
 
 //block 13
-const min_packed = 0;
+var min_packed = 0;
 
 //block 3
 var pat_start,
@@ -70,11 +123,11 @@ var xord = {},
     xchr = [];
 
 //block 18
-const invalid_code = 0;
-const tab_char = 11;
+var invalid_code = 0;
+var tab_char = 11;
 
 //block 20
-const edge_of_word = 1;
+var edge_of_word = 1;
 
 //block 22
 const
@@ -98,7 +151,7 @@ var xclass = {},
     xhyf = [];
 
 //block 25
-const cmin = edge_of_word;
+var cmin = edge_of_word;
 var cmax;
 
 //block 3
@@ -236,7 +289,7 @@ function initialize() {
 
 
 //block 19
-const num_ASCII_codes = last_ASCII_code + 1;
+var num_ASCII_codes = last_ASCII_code + 1;
 function get_ASCII(c) {
     var i;
     i = xord[c];
@@ -284,7 +337,7 @@ var trie_max,
     op_count;
 
 //block 34
-const trie_root = 1;
+var trie_root = 1;
 
 //block 35
 function first_fit() {
@@ -476,7 +529,7 @@ var triec_max,
     pat_count;
 
 //block 44
-const triec_root = 1;
+var triec_root = 1;
 function init_count_trie() {
     var c;
     for (c = 0; c <= last_ASCII_code; c += 1) {
@@ -645,7 +698,7 @@ function insertc_pat(fpos) {
 }
 
 //block 51
-var pattmp;
+var pattmp = new File("");
 
 //block 52
 var buf = [],
@@ -663,13 +716,13 @@ function bad_input(msg) {
 
 //block 52
 function read_buf(file) { //read line from file to buf
-    var from = file.read_ptr,
+    var from = file.ptr,
         to = file.content.indexOf("\n", from);
     buf = file.content.substring(from, to).split("");
     buf.push(" ");
     max_buf_len = buf.length;
     buf_ptr = buf.length - 1;
-    file.read_ptr = to + 1;
+    file.ptr = to + 1;
 }
 
 //block 55
@@ -943,7 +996,7 @@ var procesp,
     hyphp,
     pat_dot,
     hyph_level,
-    filnam = [];
+    filnam = '';
 
 //block 64
 function traverse_count_trie(b, i) {
@@ -1090,15 +1143,15 @@ function output_patterns(s, pat_len, indent) {
                     h = ops[h].op;
                 } while (h !== 0);
                 if (hval[0] > 0) {
-                    w.write(patout, xdig[hval[0]]);
+                    patout.write(xdig[hval[0]]);
                 }
                 for (d = 1; d <= pat_len; d += 1) {
-                    w.write(patout, xext[pat[d]]);
+                    patout.write(xext[pat[d]]);
                     if (hval[d] > 0) {
-                        w.write(patout, xdig[hval[d]]);
+                        patout.write(xdig[hval[d]]);
                     }
                 }
-                w.write_ln(patout, "");
+                patout.write("\n");
                  //end block 73
             }
             if (trie_l[t] > 0) {
@@ -1273,7 +1326,7 @@ function output_hyphenated_word() {
         }
     }
     w2w += xext[word[wlen - 1]];
-    w.write_ln(pattmp, w2w);
+    pattmp.write(w2w + "\n");
 }
 
 //block 83
@@ -1377,8 +1430,6 @@ function do_dictionary() {
     }
     if (hyphp) {
         filnam = "pattmp." + xdig[hyph_level];
-        w.rewrite(filnam);
-        pattmp = filnam;
         console.log("writing pattmp." + xdig[hyph_level]);
     }
     //begin block 89
@@ -1410,7 +1461,11 @@ function do_dictionary() {
         console.log(pat_count + " patterns, " + triec_count + " nodes in count trie, " + "triec_max = " + triec_max);
     }
     if (hyphp) {
-        w.close(pattmp);
+        pattmp.save(filnam).catch(
+            function (err) {
+                console.log(err);
+            }
+        );
     }
 }
 
@@ -1576,9 +1631,12 @@ function doLevels(currLevel) {
         getPat(hyph_level);
     } else {
         find_letters(trie_l[trie_root], 1);
-        w.rewrite(patout);
         output_patterns(trie_root, 1);
-        w.close(patout);
+        patout.save(process.argv[4]).catch(
+            function (err) {
+                console.log(err);
+            }
+        );
         //block 97
         procesp = false;
         hyphp = true;
@@ -1710,7 +1768,7 @@ function main() {
     getHyph();
 }
 
-main();
+//main();
 
 
 

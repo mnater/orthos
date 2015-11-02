@@ -8,4 +8,9 @@ i=1
 rm -f pattern.0
 touch pattern.0
 
-node-debug patgen.js ${DICT} pattern.$(($i-1)) pattern_tmp.$i ${TRAN} $i
+
+ printf "%s\n%s\n%s\n%s\n" "1 1" \
+                          "2 5" \
+                          "1 1 1" \
+                          "y" \
+  | time node patgen.js ${DICT} pattern.0 pattern.1 ${TRAN}
