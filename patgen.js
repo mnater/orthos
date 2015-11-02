@@ -28,17 +28,13 @@ function print(s) {
 }
 
 //block 10
-function jump_out() {
-    //terminate
-    process.exit();
-}
-function error(msg1, msg2) {
-    console.log(msg1 + msg2);
-    jump_out();
+function error(msg) {
+    console.log(msg);
+    process.exit(0);
 
 }
 function overflow(msg1) {
-    error("PATGEN capacity exceeded, sorry [" + msg1 + "].", "");
+    error("PATGEN capacity exceeded, sorry [" + msg1 + "].");
 }
 
 //Constants of the outer block 27
@@ -59,10 +55,6 @@ const
 
 //block 13
 const min_packed = 0;
-function si(c) {
-    return c;
-}
-
 
 //block 3
 var pat_start,
@@ -122,7 +114,7 @@ function initialize() {
     if (last_ASCII_code < 127) {
         bad = 1;
     }
-    if (si(0) !== min_packed || min_packed !== 0) {
+    if (0 !== min_packed || min_packed !== 0) {
         bad = 2;
     }
     //begin block 28
@@ -140,7 +132,7 @@ function initialize() {
     }
     //end block 28
     if (bad > 0) {
-        error("Bad constants---case ", bad);
+        error("Bad constants---case " + bad);
     }
     //begin block 17
     for (j = 0; j <= last_ASCII_code; j += 1) {
@@ -285,31 +277,6 @@ var trieq_c = [],
     qmax,
     qmax_thresh;
 
-//block 32
-/*
-define trie char (#) ≡ trie c [#]
-define trie link (#) ≡ trie l [#]
-define trie back (#) ≡ trie r [#]
-define trie outp (#) ≡ trie r [#]
-define trie base used (#) ≡ trie taken [#]
-
-define triec char (#) ≡ triec c [#]
-define triec link (#) ≡ triec l [#]
-define triec back (#) ≡ triec r [#]
-define triec good (#) ≡ triec l [#]
-define triec bad (#) ≡ triec r [#]
-define triec base used (#) ≡ triec taken [#]
-
-define q char (#) ≡ trieq c [#]
-define q link (#) ≡ trieq l [#]
-define q back (#) ≡ trieq r [#]
-define q outp (#) ≡ trieq r [#]
-
-define hyf val (#) ≡ ops [#].val
-define hyf dot (#) ≡ ops [#].dot
-define hyf nxt (#) ≡ ops [#].op
-*/
-
 //block 33
 var trie_max,
     trie_bmax,
@@ -365,7 +332,7 @@ function first_fit() {
         t = s + trieq_c[q];
         trie_l[trie_r[t]] = trie_l[t];
         trie_r[trie_l[t]] = trie_r[t];
-        trie_c[t] = si(trieq_c[q]);
+        trie_c[t] = trieq_c[q];
         trie_l[t] = trieq_l[q];
         trie_r[t] = trieq_r[q];
         if (t > trie_max) {
@@ -402,7 +369,7 @@ function init_pattern_trie() {
     var c, //internal_code
         h; //opt_type
     for (c = 0; c <= last_ASCII_code; c += 1) {
-        trie_c[trie_root + c] = si(c);
+        trie_c[trie_root + c] = c;
         trie_l[trie_root + c] = 0;
         trie_r[trie_root + c] = 0;
         trie_taken[trie_root + c] = false;
@@ -466,7 +433,7 @@ function insert_pattern(val, dot) {
             if (trie_c[t] === min_packed) {
                 trie_l[trie_r[t]] = trie_l[t];
                 trie_r[trie_l[t]] = trie_r[t];
-                trie_c[t] = si(pat[i]);
+                trie_c[t] = pat[i];
                 trie_l[t] = 0;
                 trie_r[t] = 0;
                 if (t > trie_max) {
@@ -513,7 +480,7 @@ const triec_root = 1;
 function init_count_trie() {
     var c;
     for (c = 0; c <= last_ASCII_code; c += 1) {
-        triec_c[triec_root + c] = si(c);
+        triec_c[triec_root + c] = c;
         triec_l[triec_root + c] = 0;
         triec_r[triec_root + c] = 0;
         triec_taken[triec_root + c] = false;
@@ -581,7 +548,7 @@ function firstc_fit() {
         a = b + trieq_c[q];
         triec_l[triec_r[a]] = triec_l[a];
         triec_r[triec_l[a]] = triec_r[a];
-        triec_c[a] = si(trieq_c[q]);
+        triec_c[a] = trieq_c[q];
         triec_l[a] = trieq_l[q];
         triec_r[a] = trieq_r[q];
         if (a > triec_max) {
@@ -641,7 +608,7 @@ function insertc_pat(fpos) {
             if (triec_c[a] === min_packed) {
                 triec_l[triec_r[a]] = triec_l[a];
                 triec_r[triec_l[a]] = triec_r[a];
-                triec_c[a] = si(word[spos]);
+                triec_c[a] = word[spos];
                 triec_l[a] = 0;
                 triec_r[a] = 0;
                 if (a > triec_max) {
@@ -691,7 +658,7 @@ function print_buf() {
 
 function bad_input(msg) {
     print_buf();
-    error(msg, "");
+    error(msg);
 }
 
 //block 52
@@ -846,7 +813,7 @@ outer:
                             if (trie_c[t] === min_packed) {
                                 trie_l[trie_r[t]] = trie_l[t];
                                 trie_r[trie_l[t]] = trie_r[t];
-                                trie_c[t] = si(pat[i]);
+                                trie_c[t] = pat[i];
                                 trie_l[t] = 0;
                                 trie_r[t] = 0;
                                 if (t > trie_max) {
@@ -953,7 +920,7 @@ function find_letters(b, i) {
                     triec_max += 1;
                     triec_l[l] = triec_max;
                     l = triec_max;
-                    triec_c[l] = si(pat[j]);
+                    triec_c[l] = pat[j];
                 }
                 triec_l[l] = 0;
                 //end block 62
