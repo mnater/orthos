@@ -271,6 +271,7 @@ function initialize() {
         xint[String.fromCharCode(i)] = 0;
     }
     xclass[" "] = space_class;
+    xclass["\n"] = space_class;
     for (j = 0; j <= last_ASCII_code; j += 1) {
         xext[j] = " ";
     }
@@ -568,7 +569,7 @@ function firstc_fit() {
         //begin block 47
         if (b > (triec_kmax - num_ASCII_codes)) {
             if (triec_kmax === triec_size) {
-                overflow(triec_size + " count trie nodes (fcf)");
+                overflow(triec_size + " count trie nodes");
             }
             print(~~(triec_kmax / 1024) + "K ");
             if (triec_kmax > (triec_size - 4096)) {
@@ -715,15 +716,17 @@ function bad_input(msg) {
 }
 
 //block 52
-function read_buf(file) { //read line from file to buf
-    var from = file.ptr,
-        to = file.content.indexOf("\n", from);
-    buf = file.content.substring(from, to).split("");
+function read_buf(file) {
+    buf = [];
+    do {
+        buf.push(file.content[file.ptr]);
+        file.ptr += 1;
+    } while (file.content[file.ptr] !== "\n");
     buf.push(" ");
     max_buf_len = buf.length;
-    buf_ptr = buf.length - 1;
-    file.ptr = to + 1;
+    file.ptr += 1;
 }
+
 
 //block 55
 var imax,
@@ -1165,13 +1168,11 @@ function output_patterns(s, pat_len, indent) {
 function read_word() {
     var c,
         t;
-    read_buf(dictionary);
     word[1] = edge_of_word;
     wlen = 1;
-    buf_ptr = 0;
 found:
     do {
-        c = buf[buf_ptr];
+        c = dictionary.content[dictionary.ptr];
         switch (xclass[c]) {
         case space_class:
             break found;
@@ -1231,8 +1232,9 @@ done:
             bad_input("Bad character");
             break;
         }
-        buf_ptr += 1;
-    } while (buf_ptr !== max_buf_len);
+        dictionary.ptr += 1;
+    } while (true);
+    dictionary.ptr += 1;
     wlen += 1;
     word[wlen] = edge_of_word;
 }
@@ -1433,6 +1435,8 @@ function do_dictionary() {
         console.log("writing pattmp." + xdig[hyph_level]);
     }
     //begin block 89
+    console.time("dict");
+    dictionary.reset();
     while (!dictionary.eof()) {
         read_word(); //see block 76
         if (wlen >= hyf_len) {
@@ -1450,6 +1454,7 @@ function do_dictionary() {
             }
         }
     }
+    console.timeEnd("dict");
     //end block 89
     //r.close(dictionary);
     console.log(" ");
