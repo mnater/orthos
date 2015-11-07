@@ -1,6 +1,13 @@
 /*jslint browser: false, node: true, es6: true, for: true, fudge: true*/
 "use strict";
 
+/**
+ * Read the files given as arguments and create a `File`
+ * `File` is a proxy that holds the content of the readed
+ * file in memory – here we trade memory for I/O
+ * (typically the dictionary files are < 10MB)
+ * Todo: Error if a file's missing
+ */
 var fs = require("fs");
 
 var File = function (content) {
@@ -52,29 +59,13 @@ function readFilePromise(path) {
 
 var dictionaryProm = readFilePromise(process.argv[2]),
     patternInProm = readFilePromise(process.argv[3]),
-    translateProm = readFilePromise(process.argv[5]),
     patout = new File(""),
     dictionary,
-    patterns,
-    translate;
+    patterns;
 
-Promise.all([dictionaryProm, patternInProm, translateProm]).then(
-    function (values) {
-        dictionary = new File(values[0]);
-        patterns = new File(values[1]);
-        translate = new File(values[2]);
-        main();
-    }
-).catch(
-    function (values) {
-        console.log(values);
-    }
-);
-
-
-//block 1
-var banner = "This is patgen.js for node.js, Version 1.0b";
-
+/**
+ * Some helper functions
+ */
 //block 3
 function print(s) {
     process.stdout.write(s);
@@ -90,24 +81,69 @@ function overflow(msg1) {
     error("PATGEN capacity exceeded, sorry [" + msg1 + "].");
 }
 
+
+/**
+ * Globally defined const and var/let
+ * Todo:
+ * [] Comment each var/const/let
+ * [] Check which vars/consts could be made local or eliminated
+ * [] Check if some var/let can be redefined as const
+ * [] use let instead of var (beware no-opt of compound let statements)
+ */
+//block 1
+
+/**
+ * First line printed out when patgen is run
+ */
+const banner = "This is patgen.js for node.js, Version 1.0b";
+
 //Constants of the outer block 27
-const
-    trie_size = 55000 * 8,
-    triec_size = 26000 * 8,
-    max_ops = 4080,
-    max_val = 10,
-    max_dot = 15,
-    max_len = 50;
-var max_buf_len = 80;
+/**
+ * space for pattern trie
+ * originally this was 55000, but that's to small for the german dictionary
+ * Todo: make this dynamic
+ */
+const trie_size = 55000 * 8;
+
+/**
+ * space for pattern count trie, must be less than trie_size and greater
+ * than the number of occurrences of any pattern in the dictionary
+ * originally this was 26000, but that's to small for the german dictionary
+ * Todo: make this dynamic
+ */
+const triec_size = 26000 * 8;
+
+/**
+ * size of output hash table, should be a multiple of 510 (= 2*255)
+ */
+const max_ops = 4080;
+
+/**
+ * maximum number of levels+1, also used to denote bad patterns
+ */
+const max_val = 10;
+
+/**
+ * maximum pattern length,
+ * also maximum length of external representation of a 'letter'
+ */
+const max_dot = 15;
+
+/**
+ * maximum word length,
+ */
+const max_len = 50;
+
+/**
+ * maximum length of input lines, at least max_len
+ * originaly this was const set to 80, but it's faster
+ * to dynamically assign the buf-array and push new values.
+ *
+ */
+var buf_len;
 
 //block 12
-const
-    first_text_char = 0,
-    last_text_char = 255,
-    last_ASCII_code = 255;
-
-//block 13
-var min_packed = 0;
+var lastInternalCharCode = 127;
 
 //block 3
 var pat_start,
@@ -118,16 +154,11 @@ var pat_start,
     bad_wt,
     thresh;
 
-//block 16
-var xord = {},
-    xchr = [];
-
 //block 18
-var invalid_code = 0;
-var tab_char = 11;
+//var invalid_code = 0;
 
 //block 20
-var edge_of_word = 1;
+var edge_of_word = 10;
 
 //block 22
 const
@@ -151,167 +182,34 @@ var xclass = {},
     xhyf = [];
 
 //block 25
-var cmin = edge_of_word;
+var cmin = 1;
 var cmax;
 
-//block 3
-function initialize() {
-    //begin block 15
-    var bad,
-        i,
-        j;
-    //end block 15
-    console.log(banner);
-    //begin block 14
-    bad = 0;
-    if (last_ASCII_code < 127) {
-        bad = 1;
-    }
-    if (0 !== min_packed || min_packed !== 0) {
-        bad = 2;
-    }
-    //begin block 28
-    if (triec_size < 4096 || trie_size < triec_size) {
-        bad = 3;
-    }
-    if (max_ops > trie_size) {
-        bad = 4;
-    }
-    if (max_val > 10) {
-        bad = 5;
-    }
-    if (max_buf_len < max_len) {
-        bad = 6;
-    }
-    //end block 28
-    if (bad > 0) {
-        error("Bad constants---case " + bad);
-    }
-    //begin block 17
-    for (j = 0; j <= last_ASCII_code; j += 1) {
-        xchr[j] = " ";
-    }
-    xchr[46] = ".";
-    xchr[30] = "0";
-    xchr[31] = "1";
-    xchr[32] = "2";
-    xchr[33] = "3";
-    xchr[34] = "4";
-    xchr[35] = "5";
-    xchr[36] = "6";
-    xchr[37] = "7";
-    xchr[38] = "8";
-    xchr[39] = "9";
-    xchr[65] = "A";
-    xchr[66] = "B";
-    xchr[67] = "C";
-    xchr[68] = "D";
-    xchr[69] = "E";
-    xchr[70] = "F";
-    xchr[71] = "G";
-    xchr[72] = "H";
-    xchr[73] = "I";
-    xchr[74] = "J";
-    xchr[75] = "K";
-    xchr[76] = "L";
-    xchr[77] = "M";
-    xchr[78] = "N";
-    xchr[79] = "O";
-    xchr[80] = "P";
-    xchr[81] = "Q";
-    xchr[82] = "R";
-    xchr[83] = "S";
-    xchr[84] = "T";
-    xchr[85] = "U";
-    xchr[86] = "V";
-    xchr[87] = "W";
-    xchr[88] = "X";
-    xchr[89] = "Y";
-    xchr[90] = "Z";
-    xchr[97] = "a";
-    xchr[98] = "b";
-    xchr[99] = "c";
-    xchr[100] = "d";
-    xchr[101] = "e";
-    xchr[102] = "f";
-    xchr[103] = "g";
-    xchr[104] = "h";
-    xchr[105] = "i";
-    xchr[106] = "j";
-    xchr[107] = "k";
-    xchr[108] = "l";
-    xchr[109] = "m";
-    xchr[110] = "n";
-    xchr[111] = "o";
-    xchr[112] = "p";
-    xchr[113] = "q";
-    xchr[114] = "r";
-    xchr[115] = "s";
-    xchr[116] = "t";
-    xchr[117] = "u";
-    xchr[118] = "v";
-    xchr[119] = "w";
-    xchr[120] = "x";
-    xchr[121] = "y";
-    xchr[122] = "z";
-    //end block 17
-    //begin block 18
-    for (i = first_text_char; i <= last_text_char; i += 1) {
-        xord[String.fromCharCode(i)] = invalid_code;
-    }
-    for (j = 0; j <= last_ASCII_code; j += 1) {
-        xord[xchr[j]] = j;
-    }
-    xord[" "] = " ";
-    xord[String.fromCharCode(tab_char)] = " ";
-    //end block 18
-    //begin block 24
-    for (i = first_text_char; i <= last_text_char; i += 1) {
-        xclass[String.fromCharCode(i)] = invalid_class;
-        xint[String.fromCharCode(i)] = 0;
-    }
+
+function initialize2() {
+    String("0123456789").split("").forEach(function (c, i) {
+        xext[i] = c;
+        xint[c] = i;
+        xclass[c] = digit_class;
+    });
+    xext[10] = ".";
+    xint["."] = 10;
+    xint["*"] = 10;
+    xint["-"] = 10;
+    edge_of_word = 10;
+    xclass["."] = hyf_class;
+    xclass["*"] = hyf_class;
+    xclass["-"] = hyf_class;
     xclass[" "] = space_class;
     xclass["\n"] = space_class;
-    for (j = 0; j <= last_ASCII_code; j += 1) {
-        xext[j] = " ";
-    }
-    xext[edge_of_word] = ".";
-    for (j = 0; j <= 9; j += 1) {
-        xdig[j] = xchr[j + 30]; //30 = "0"
-        xclass[xdig[j]] = digit_class;
-        xint[xdig[j]] = j;
-    }
+    //define characters for testing patterns
     xhyf[err_hyf] = ".";
     xhyf[is_hyf] = "-";
     xhyf[found_hyf] = "*";
-    //end block 24
-    //end block 14
 }
-
 
 //block 19
-var num_ASCII_codes = last_ASCII_code + 1;
-function get_ASCII(c) {
-    var i;
-    i = xord[c];
-    if (i === invalid_code || i === undefined) {
-        i = 0;
-        while (i < last_ASCII_code) {
-            i += 1;
-            if (xchr[i] === " " && i !== 32) { //32 = " "
-                xord[c] = i;
-                xchr[i] = c;
-                return i;
-            }
-        }
-        overflow(num_ASCII_codes + " characters");
-        xord[c] = i;
-        xchr[i] = c;
-    }
-    return i;
-}
-
-
+var numInternalCharCodes;
 
 //block 30
 var trie_c = [],
@@ -359,20 +257,20 @@ function first_fit() {
         t = trie_l[t];
         s = t - trieq_c[1];
         //block 37
-        if (s > trie_size - num_ASCII_codes) {
+        if (s > trie_size - numInternalCharCodes) {
             overflow(trie_size + " pattern trie nodes");
         }
         while (trie_bmax < s) {
             trie_bmax += 1;
             trie_taken[trie_bmax] = false;
-            trie_c[trie_bmax + last_ASCII_code] = min_packed;
-            trie_l[trie_bmax + last_ASCII_code] = trie_bmax + num_ASCII_codes;
-            trie_r[trie_bmax + num_ASCII_codes] = trie_bmax + last_ASCII_code;
+            trie_c[trie_bmax + lastInternalCharCode] = 0;
+            trie_l[trie_bmax + lastInternalCharCode] = trie_bmax + numInternalCharCodes;
+            trie_r[trie_bmax + numInternalCharCodes] = trie_bmax + lastInternalCharCode;
         }
         // end block 37
         if (!trie_taken[s]) {
             for (q = qmax; q >= 2; q -= 1) {
-                if (trie_c[s + trieq_c[q]] !== min_packed) {
+                if (trie_c[s + trieq_c[q]] !== 0) {
                     continueLoop = true;
                 }
             }
@@ -413,7 +311,7 @@ function unpack(s) {
             trie_l[t] = trie_l[0];
             trie_l[0] = t;
             trie_r[t] = 0;
-            trie_c[t] = min_packed;
+            trie_c[t] = 0;
         }
     }
     trie_taken[s] = false;
@@ -422,7 +320,7 @@ function unpack(s) {
 function init_pattern_trie() {
     var c, //internal_code
         h; //opt_type
-    for (c = 0; c <= last_ASCII_code; c += 1) {
+    for (c = 0; c <= lastInternalCharCode; c += 1) {
         trie_c[trie_root + c] = c;
         trie_l[trie_root + c] = 0;
         trie_r[trie_root + c] = 0;
@@ -430,8 +328,8 @@ function init_pattern_trie() {
     }
     trie_taken[trie_root] = true;
     trie_bmax = trie_root;
-    trie_max = trie_root + last_ASCII_code;
-    trie_count = num_ASCII_codes;
+    trie_max = trie_root + lastInternalCharCode;
+    trie_count = numInternalCharCodes;
     qmax_thresh = 5;
     trie_l[0] = trie_max + 1;
     trie_r[trie_max + 1] = 0;
@@ -484,7 +382,7 @@ function insert_pattern(val, dot) {
         t += pat[i];
         if (trie_c[t] !== pat[i]) {
             //begin block 42
-            if (trie_c[t] === min_packed) {
+            if (trie_c[t] === 0) {
                 trie_l[trie_r[t]] = trie_l[t];
                 trie_r[trie_l[t]] = trie_r[t];
                 trie_c[t] = pat[i];
@@ -533,7 +431,7 @@ var triec_max,
 var triec_root = 1;
 function init_count_trie() {
     var c;
-    for (c = 0; c <= last_ASCII_code; c += 1) {
+    for (c = 0; c <= lastInternalCharCode; c += 1) {
         triec_c[triec_root + c] = c;
         triec_l[triec_root + c] = 0;
         triec_r[triec_root + c] = 0;
@@ -541,8 +439,8 @@ function init_count_trie() {
     }
     triec_taken[triec_root] = true;
     triec_bmax = triec_root;
-    triec_max = triec_root + last_ASCII_code;
-    triec_count = num_ASCII_codes;
+    triec_max = triec_root + lastInternalCharCode;
+    triec_count = numInternalCharCodes;
     triec_kmax = 4096;
     triec_l[0] = triec_max + 1;
     triec_r[triec_max + 1] = 0;
@@ -567,7 +465,7 @@ function firstc_fit() {
         a = triec_l[a];
         b = a - trieq_c[1];
         //begin block 47
-        if (b > (triec_kmax - num_ASCII_codes)) {
+        if (b > (triec_kmax - numInternalCharCodes)) {
             if (triec_kmax === triec_size) {
                 overflow(triec_size + " count trie nodes");
             }
@@ -581,14 +479,14 @@ function firstc_fit() {
         while (triec_bmax < b) {
             triec_bmax += 1;
             triec_taken[triec_bmax] = false;
-            triec_c[triec_bmax + last_ASCII_code] = min_packed;
-            triec_l[triec_bmax + last_ASCII_code] = triec_bmax + num_ASCII_codes;
-            triec_r[triec_bmax + num_ASCII_codes] = triec_bmax + last_ASCII_code;
+            triec_c[triec_bmax + lastInternalCharCode] = 0;
+            triec_l[triec_bmax + lastInternalCharCode] = triec_bmax + numInternalCharCodes;
+            triec_r[triec_bmax + numInternalCharCodes] = triec_bmax + lastInternalCharCode;
         }
         //end block 47
         if (!triec_taken[b]) {
             for (q = qmax; q >= 2; q -= 1) {
-                if (triec_c[b + trieq_c[q]] !== min_packed) {
+                if (triec_c[b + trieq_c[q]] !== 0) {
                     continueLoop = true;
                 }
             }
@@ -629,7 +527,7 @@ function unpackc(b) {
             triec_l[a] = triec_l[0];
             triec_l[0] = a;
             triec_r[a] = 0;
-            triec_c[a] = min_packed;
+            triec_c[a] = 0;
         }
     }
     triec_taken[b] = false;
@@ -659,7 +557,7 @@ function insertc_pat(fpos) {
         a += word[spos];
         if (triec_c[a] !== word[spos]) {
             //begin block 50
-            if (triec_c[a] === min_packed) {
+            if (triec_c[a] === 0) {
                 triec_l[triec_r[a]] = triec_l[a];
                 triec_r[triec_l[a]] = triec_r[a];
                 triec_c[a] = word[spos];
@@ -723,233 +621,14 @@ function read_buf(file) {
         file.ptr += 1;
     } while (file.content[file.ptr] !== "\n");
     buf.push(" ");
-    max_buf_len = buf.length;
+    buf_len = buf.length;
     file.ptr += 1;
 }
 
 
 //block 55
-var imax,
-    left_hyphen_min,
+var left_hyphen_min,
     right_hyphen_min;
-
-//block 56
-function setupDefaultCharTable() {
-    var c,
-        j;
-    left_hyphen_min = 2;
-    right_hyphen_min = 3;
-    for (j = 65; j <= 90; j += 1) { //A: 65, Z: 90 in ASCII
-        imax += 1;
-        c = xchr[j + 97 - 65]; //j + "a" - "A"
-        xint[c] = imax;
-        xext[imax] = c;
-        c = xchr[j]; //j + "a" - "A"
-        xint[c] = imax;
-        xext[imax] = c;
-    }
-}
-
-function isDigit(c) {
-    return (c.charCodeAt() <= 57 && c.charCodeAt() >= 48);
-}
-
-//block 57
-function setupHyphenationData() {
-    var bad = 0,
-        n,
-        j;
-    //left_hyphen_min
-    if (buf[0] === " ") {
-        n = 0;
-    } else if (isDigit(buf[0])) {
-        n = xint[buf[0]];
-    } else {
-        bad = 1;
-    }
-    if (isDigit(buf[1])) {
-        n = 10 * n + xint[parseInt(buf[1], 10)];
-    } else {
-        bad = 2;
-    }
-    if (n >= 1 && n < max_dot) {
-        left_hyphen_min = n;
-    } else {
-        bad = 3;
-    }
-    //right_hyphen_min
-    if (buf[2] === " ") {
-        n = 0;
-    } else if (isDigit(buf[2])) {
-        n = xint[buf[2]];
-    } else {
-        bad = 4;
-    }
-    if (isDigit(buf[3])) {
-        n = 10 * n + xint[buf[3]];
-    } else {
-        bad = 5;
-    }
-    if (n >= 1 && n < max_dot) {
-        right_hyphen_min = n;
-    } else {
-        bad = 6;
-    }
-    /*if (bad) {
-        bad = false;
-        //get data from user
-    }*/
-    for (j = err_hyf; j <= found_hyf; j += 1) {
-        if (buf[j + 4] !== undefined && buf[j + 4] !== " ") {
-            xhyf[j] = buf[j + 4];
-        }
-    }
-    if (bad !== 0) {
-        bad_input("Bad hyphenation data: " + bad);
-    }
-
-}
-
-
-//block 58
-function setupRepresentationForletter() {
-    var c,
-        bad = 0,
-        lower = true,
-        i,
-        s,
-        t;
-    read_buf(translate);
-    buf_ptr = 0;
-outer:
-    while (bad === 0) {
-        pat_len = 0;
-        do {
-            if (buf_ptr < max_buf_len) {
-                buf_ptr += 1;
-            } else {
-                break outer;
-            }
-            if (buf[buf_ptr] === buf[0]) {
-                if (pat_len === 0) {
-                    break outer;
-                }
-                if (lower) {
-                    if (imax === last_ASCII_code) {
-                        print_buf();
-                        overflow(num_ASCII_codes + " letters");
-                    }
-                    imax += 1;
-                    xext[imax] = xchr[pat[pat_len]];
-                }
-                c = xchr[pat[1]];
-                if (pat_len === 1) {
-                    if (xclass[c] !== invalid_class && xclass[c] !== undefined) {
-                        bad = 2;
-                    }
-                    xclass[c] = letter_class;
-                    xint[c] = imax;
-                } else {
-                    //block 59
-                    if (xclass[c] === invalid_class) {
-                        xclass[c] = escape_class;
-                    }
-                    if (xclass[c] !== escape_class) {
-                        bad = 3;
-                    }
-                    i = 0;
-                    s = trie_root;
-                    t = trie_l[s];
-                    while (t > trie_root && i < pat_len) {
-                        //follow existing trie
-                        i += 1;
-                        t += pat[i];
-                        if (trie_c[t] !== pat[i]) {
-                            //begin block 42
-                            if (trie_c[t] === min_packed) {
-                                trie_l[trie_r[t]] = trie_l[t];
-                                trie_r[trie_l[t]] = trie_r[t];
-                                trie_c[t] = pat[i];
-                                trie_l[t] = 0;
-                                trie_r[t] = 0;
-                                if (t > trie_max) {
-                                    trie_max = t;
-                                }
-                            } else {
-                                unpack(t - pat[i]);
-                                trieq_c[qmax] = pat[i];
-                                trieq_l[qmax] = 0;
-                                trieq_r[qmax] = 0;
-                                t = first_fit();
-                                trie_l[s] = t;
-                                t += pat[i];
-                            }
-                            trie_count += 1;
-                            //end block 42
-                        } else {
-                            if (trie_r(t) > 0) {
-                                bad = 4;
-                            }
-                        }
-                        s = t;
-                        t = trie_l[s];
-                    }
-                    if (t > trie_root) {
-                        bad = 5;
-                    }
-                    trieq_l[1] = 0;
-                    trieq_r[1] = 0;
-                    qmax = 1;
-                    while (i < pat_len) {
-                        //insert rest of pattern
-                        i += 1;
-                        trieq_c[1] = pat[i];
-                        t = first_fit();
-                        trie_l[s] = t;
-                        s = t + pat[i];
-                        trie_count += 1;
-                    }
-                    trie_r[s] = imax;
-                    if (!lower) {
-                        trie_l[s] = trie_root;
-                    }
-                }
-                //end block 59
-            } else {
-                if (pat_len === max_dot) {
-                    bad = 6;
-                } else {
-                    pat_len += 1;
-                    pat[pat_len] = get_ASCII(buf[buf_ptr]);
-                }
-            }
-        } while ((buf[buf_ptr] !== buf[0]) && bad === 0);
-        lower = false;
-    }
-    if (bad) {
-        bad_input("Bad represenation " + bad);
-    }
-}
-
-//block 54
-function read_translate() {
-    imax = edge_of_word;
-    translate.reset();
-    if (translate.eof()) {
-        setupDefaultCharTable();
-    } else {
-        read_buf(translate);
-        setupHyphenationData();
-        cmax = last_ASCII_code - 1;
-        while (!translate.eof()) {
-            setupRepresentationForletter();
-        }
-        //r.close(translate);
-        console.log("left_hyphen_min = " + left_hyphen_min + ", right_hyphen_min = " + right_hyphen_min + ", " + (imax - edge_of_word) + " letters");
-        cmax = imax;
-    }
-
-}
 
 //block 61
 function find_letters(b, i) {
@@ -960,7 +639,7 @@ function find_letters(b, i) {
     if (i === 0) {
         init_count_trie();
     }
-    for (c = cmin; c <= last_ASCII_code; c += 1) {
+    for (c = cmin; c <= lastInternalCharCode; c += 1) {
         a = b + c;
         if (trie_c[a] === c) {
             pat[i] = c;
@@ -1090,7 +769,7 @@ function delete_patterns(s) {
                 trie_r[t] = trie_r[trie_max + 1];
                 trie_l[t] = trie_max + 1;
                 trie_r[trie_max + 1] = t;
-                trie_c[t] = min_packed;
+                trie_c[t] = 0;
                 trie_count -= 1;
                 //end block 70
             }
@@ -1209,15 +888,15 @@ found:
             t = trie_root;
 done:
             while (true) {
-                t = trie_l[t] + xord[c];
-                if (trie_c[t] !== xord[c]) {
+                t = trie_l[t] + xint[c];
+                if (trie_c[t] !== xint[c]) {
                     bad_input("Bad represenation");
                 }
                 if (trie_r[t] !== 0) {
                     word[wlen] = trie_r[t];
                     break done;
                 }
-                if (buf_ptr === max_buf_len) {
+                if (buf_ptr === buf_len) {
                     c = " ";
                 } else {
                     buf_ptr += 1;
@@ -1435,7 +1114,6 @@ function do_dictionary() {
         console.log("writing pattmp." + xdig[hyph_level]);
     }
     //begin block 89
-    console.time("dict");
     dictionary.reset();
     while (!dictionary.eof()) {
         read_word(); //see block 76
@@ -1454,7 +1132,6 @@ function do_dictionary() {
             }
         }
     }
-    console.timeEnd("dict");
     //end block 89
     //r.close(dictionary);
     console.log(" ");
@@ -1521,15 +1198,15 @@ found:  do {
                 //begin block 60: # = pat[pat_len]
                 t = trie_root;
                 while (true) {
-                    t = trie_l[t] + xord[c];
-                    if (trie_c[t] !== xord[c]) {
+                    t = trie_l[t] + xint[c];
+                    if (trie_c[t] !== xint[c]) {
                         bad_input("Bad represenation");
                     }
                     if (trie_r[t] !== 0) {
                         pat[pat_len] = trie_r[t];
                         break;
                     }
-                    if (buf_ptr === max_buf_len) {
+                    if (buf_ptr === buf_len) {
                         c = " ";
                     } else {
                         buf_ptr += 1;
@@ -1542,7 +1219,7 @@ found:  do {
                 bad_input("Bad character");
             }
             buf_ptr += 1;
-        } while (buf_ptr !== max_buf_len);
+        } while (buf_ptr !== buf_len);
         //end block 92
         //block 93
         if (pat_len > 0) {
@@ -1565,17 +1242,15 @@ found:  do {
     console.log("pattern trie has " + trie_count + " nodes, trie_max = " + trie_max + ", " + op_count + " outputs");
 }
 
-//block 95
-var j,
-    k,
-    dot1,
-    more_this_level = [];
 
 
 //block 94
-
-
 function generateLevel() {
+    //block 95
+    var j,
+        k,
+        dot1,
+        more_this_level = [];
     //generate a level 96
     for (k = 0; k <= max_dot; k += 1) {
         more_this_level[k] = true;
@@ -1588,9 +1263,7 @@ function generateLevel() {
             pat_dot = dot1 - pat_dot;
             dot1 = pat_len * 2 - dot1 - 1;
             if (more_this_level[pat_dot]) {
-                console.time("do_dictionary");
                 do_dictionary();
-                console.timeEnd("do_dictionary");
                 collect_count_trie();
                 more_this_level[pat_dot] = more_to_come;
             }
@@ -1622,6 +1295,7 @@ function askDoDictionary() {
         }
     });
 }
+
 
 function doLevels(currLevel) {
     hyph_level = max_pat;
@@ -1763,17 +1437,129 @@ function getHyph() {
     });
 }
 
+
 function main() {
-    initialize();
+    //initialize();
     init_pattern_trie();
-    read_translate();
+    //read_translate();
     read_patterns();
     procesp = true;
     hyphp = false;
     getHyph();
 }
 
-//main();
+function collectAndSetChars() {
+    var charsS = new Set(),
+        charsA,
+        c;
+    dictionary.reset();
+    console.log("collecting chars…");
+    while (!dictionary.eof()) {
+        c = dictionary.content.charAt(dictionary.ptr).valueOf();
+        if (c.charCodeAt(0) !== 13 && c.charCodeAt(0) !== 45 && c.charCodeAt(0) > 57) {
+            charsS.add(c);
+        }
+        dictionary.ptr += 1;
+    }
+    charsA = Array.from(charsS);
+    charsA.sort();
+    charsA.forEach(function (c) {
+        var i = xint[c];
+        if (i === undefined) {
+            if (c === c.toUpperCase()) {
+                //c is upperCase -> try lowerCase
+                i = xint[c.toLowerCase()];
+            } else {
+                //c ist lowerCase -> try upperCase
+                i = xint[c.toUpperCase()];
+            }
+            if (i === undefined) {
+                i = 11; //0-10 are reserved for digits and "."
+                while (xext[i] !== undefined) {
+                    i += 1;
+                }
+                //new insertion:
+                xext[i] = c.toLowerCase();
+                xint[c] = i;
+                xclass[c] = letter_class;
+            } else {
+                //other case already exists:
+                xint[c] = i;
+                xclass[c] = letter_class;
+            }
+        }
+    });
+    xdig = xext.slice(0, 10);
+    cmax = xext.length - 1;
+    numInternalCharCodes = xext.length;
+    lastInternalCharCode = numInternalCharCodes - 1;
+    main();
+}
 
+function getLeftRightHyphenMin() {
+    var readline = require('readline'),
+        rl = readline.createInterface(process.stdin, process.stdout),
+        n1,
+        n2;
+    rl.setPrompt('left_hyphen_min, right_hyphen_min: ');
+    rl.prompt();
+
+    rl.on('line', function (line) {
+        line = line.trim();
+        var chunks = [];
+        if (line.length === 3) {
+            chunks.push(line.slice(0, 1));
+            chunks.push(line.slice(1));
+        } else if (line.length === 4) {
+            chunks.push(line.slice(0, 2));
+            chunks.push(line.slice(2));
+        } else {
+            chunks = [0, 0];
+        }
+        if (chunks.length >= 2) {
+            n1 = parseInt(chunks[0], 10);
+            n2 = parseInt(chunks[1], 10);
+            rl.pause();
+        } else if (chunks.length === 1) {
+            if (n1 === undefined) {
+                n1 = parseInt(chunks[0], 10);
+            } else {
+                n2 = parseInt(chunks[0], 10);
+                rl.pause();
+            }
+        }
+    }).on('pause', function () {
+        if (n1 >= 1 && n1 < 15 && n2 >= 1 && n2 < 15) {
+            left_hyphen_min = n1;
+            right_hyphen_min = n2;
+            rl.close();
+            collectAndSetChars();
+        } else {
+            rl.close();
+            console.log("Specify 1<=left_hyphen_min,right_hyphen_min<=15 !");
+            getLeftRightHyphenMin();
+        }
+    });
+}
+
+function init() {
+    console.log(banner);
+    initialize2();
+    getLeftRightHyphenMin();
+}
+
+
+Promise.all([dictionaryProm, patternInProm]).then(
+    function (values) {
+        dictionary = new File(values[0]);
+        patterns = new File(values[1]);
+        //translate = new File(values[2]);
+        init();
+    }
+).catch(
+    function (values) {
+        console.log(values);
+    }
+);
 
 

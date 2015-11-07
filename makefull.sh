@@ -19,8 +19,18 @@
 #          pattern.rules      Die patgen-Parameter in kompakter Form.
 #
 
+DICT="./wortliste_extr.txt"
 
 # Die Parameter für patgen für die Level eins bis acht.
+
+hyph_min_max[1]='2 2'
+hyph_min_max[2]='2 2'
+hyph_min_max[3]='2 2'
+hyph_min_max[4]='2 2'
+hyph_min_max[5]='2 2'
+hyph_min_max[6]='2 2'
+hyph_min_max[7]='2 2'
+hyph_min_max[8]='2 2'
 
 hyph_start_finish[1]='1 1'
 hyph_start_finish[2]='2 2'
@@ -58,11 +68,14 @@ for i in 1 2 3 4 5 6 7 8; do
 
   #Erzeuge Muster des aktuellen Levels.  Steuereingaben werden patgen
   #mittels einer Pipe übergeben.
-  printf "%s\n%s\n%s\n%s\n" "${hyph_start_finish[$i]}" \
-                          "${pat_start_finish[$i]}" \
-                          "${good_bad_thres[$i]}" \
-                          "y" \
-  | node patgen $1 pattern.$(($i-1)) pattern.$i $2
+
+  printf "%s\n%s\n%s\n%s\n%s\n" "${hyph_min_max[$i]}" \
+                                "${hyph_start_finish[$i]}" \
+                                "${pat_start_finish[$i]}" \
+                                "${good_bad_thres[$i]}" \
+                                "y" \
+  | node patgen.js ${DICT} pattern.$(($i-1)) pattern.$i
+
 
   # Sammle verwendete patgen-Parameter in Datei.
   printf "%%   %s | %s | %s\n" "${hyph_start_finish[$i]}" \
