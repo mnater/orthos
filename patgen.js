@@ -212,20 +212,22 @@ function initialize2() {
 var numInternalCharCodes;
 
 //block 30
-var trie_c = [],
-    trie_l = [],
-    trie_r = [],
+
+
+const trie_c = new Uint32Array(trie_size),
+    trie_l = new Uint32Array(trie_size),
+    trie_r = new Uint32Array(trie_size),
     trie_taken = [],
-    triec_c = [],
-    triec_l = [],
-    triec_r = [],
+    triec_c = new Uint32Array(triec_size),
+    triec_l = new Uint32Array(triec_size),
+    triec_r = new Uint32Array(triec_size),
     triec_taken = [],
     ops = [];
 
 //block 31
-var trieq_c = [],
-    trieq_l = [],
-    trieq_r = [],
+var trieq_c = new Uint32Array(50),
+    trieq_l = new Uint32Array(50),
+    trieq_r = new Uint32Array(50),
     qmax,
     qmax_thresh;
 
@@ -534,11 +536,11 @@ function unpackc(b) {
 }
 
 //block 74
-var word = [],
-    dots = [],
-    dotw = [],
-    hval = [],
-    no_more = [],
+var word = new Uint8Array(max_len),
+    dots = new Uint8Array(max_len),
+    dotw = new Uint8Array(max_len),
+    hval = new Uint8Array(max_len),
+    no_more = new Uint8Array(max_len),
     wlen,
     word_wt,
     wt_chg;
@@ -934,7 +936,7 @@ function hyphenate() {
         v;
 
     for (spos = wlen - hyf_max; spos >= 0; spos -= 1) {
-        no_more[spos] = false;
+        no_more[spos] = 0;
         hval[spos] = 0;
         fpos = spos + 1;
         t = trie_root + word[fpos];
@@ -949,7 +951,7 @@ function hyphenate() {
                 }
                 if (v >= hyph_level) {
                     if ((fpos - pat_len) <= (dpos - pat_dot) && (dpos - pat_dot) <= spos) {
-                        no_more[dpos] = true;
+                        no_more[dpos] = 1;
                     }
                 }
                 h = ops[h].op;
@@ -1021,7 +1023,7 @@ function do_word() {
         spos = dpos - pat_dot;
         fpos = spos + pat_len;
         //begin block 86
-        if (!no_more[dpos]) {
+        if (no_more[dpos] === 0) {
             if (dots[dpos] === good_dot) {
                 goodp = true;
                 spos += 1;
@@ -1110,8 +1112,8 @@ function do_dictionary() {
         console.log("processing dictionary with pat_len " + pat_len + ", pat_dot = " + pat_dot);
     }
     if (hyphp) {
-        filnam = "pattmp." + xdig[hyph_level];
-        console.log("writing pattmp." + xdig[hyph_level]);
+        filnam = `pattmp.${hyph_level}`;
+        console.log("writing " + filnam);
     }
     //begin block 89
     dictionary.reset();
@@ -1439,9 +1441,7 @@ function getHyph() {
 
 
 function main() {
-    //initialize();
     init_pattern_trie();
-    //read_translate();
     read_patterns();
     procesp = true;
     hyphp = false;
@@ -1455,15 +1455,15 @@ function collectAndSetChars() {
     dictionary.reset();
     console.log("collecting chars…");
     while (!dictionary.eof()) {
-        c = dictionary.content.charAt(dictionary.ptr).valueOf();
-        if (c.charCodeAt(0) !== 13 && c.charCodeAt(0) !== 45 && c.charCodeAt(0) > 57) {
+        c = dictionary.content.charAt(dictionary.ptr);
+        if (c !== "\n" && c !== "-" && c.charCodeAt(0) > 57) {
             charsS.add(c);
         }
         dictionary.ptr += 1;
     }
     charsA = Array.from(charsS);
     charsA.sort();
-    charsA.forEach(function (c) {
+    charsA.forEach(function setChar(c) {
         var i = xint[c];
         if (i === undefined) {
             if (c === c.toUpperCase()) {
@@ -1474,12 +1474,7 @@ function collectAndSetChars() {
                 i = xint[c.toUpperCase()];
             }
             if (i === undefined) {
-                i = 11; //0-10 are reserved for digits and "."
-                while (xext[i] !== undefined) {
-                    i += 1;
-                }
-                //new insertion:
-                xext[i] = c.toLowerCase();
+                i = xext.push(c.toLowerCase()) - 1;
                 xint[c] = i;
                 xclass[c] = letter_class;
             } else {
