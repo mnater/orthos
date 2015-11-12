@@ -59,6 +59,25 @@ good_bad_thres[6]='1 6 1'
 good_bad_thres[7]='1 4 1'
 good_bad_thres[8]='1 8 1'
 
+#best parameter so far:
+# pat_start_finish[1]='2 13'
+# pat_start_finish[2]='2 13'
+# pat_start_finish[3]='2 13'
+# pat_start_finish[4]='2 13'
+# pat_start_finish[5]='2 13'
+# pat_start_finish[6]='2 13'
+# pat_start_finish[7]='2 13'
+# pat_start_finish[8]='2 13'
+
+# good_bad_thres[1]='1 2 16'
+# good_bad_thres[2]='1 2 16'
+# good_bad_thres[3]='1 4 8'
+# good_bad_thres[4]='1 4 8'
+# good_bad_thres[5]='1 8 4'
+# good_bad_thres[6]='1 8 4'
+# good_bad_thres[7]='1 16 1'
+# good_bad_thres[8]='1 16 1'
+
 
 # Erzeuge leere Startmuster, lösche Datei mit patgen-Parametern.
 rm -f pattern.0 pattern.rules
