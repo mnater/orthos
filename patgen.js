@@ -1,12 +1,79 @@
+/**
+ * patgen.js - Pattern Generator for hyphenation patterns in node.js
+ *
+ * USAGE
+ *
+ * HISTORY
+ * patgen (PATtern GENeration program for the TEX82 hyphenator) was originally
+ * written by Frank Liang in PASCAL in 1983 and had revisions in 1991, 1992
+ * and 1996 by Peter Breitenloher and in 1996 by Karl Berry. It was originally
+ * ported to UNIX by Howard Trickey.
+ * patgen is a piece of very well documented and mature software and it is
+ * still used to produce new patterns for Frank Liangs hyphenation algorithm.
+ *
+ * Further reading about patgen and Liangs hyphenation algorithm:
+ * - patgen.web: the original patgen
+ *   https://www.ctan.org/pkg/patgen
+ *   (use weave and tangle to translate the literal programming WEB
+ *   to TEX and PASCAL respectively)
+ * - Frank  Liang,  Word hy-phen-a-tion by com-puter, STAN-CS-83-977,
+ *   Stanford University Ph.D. thesis, 1983
+ *   http://tug.org/docs/liang
+ *
+ * A program called opatgen (with Unicode support and other improvements, by
+ * David Antos and Petr Sojka) is also mentioned on http://tug.org/docs/liang
+ * put the link is broken and I can't find this software anymore.
+ *
+ * So why a port of patgen to node.js? (and why JavaScript and not just C?)
+ *
+ * When patgen was originally written computers were very limited: the PDP-10
+ * mainframe computer used by Liang had 256 Kilowords – about 1MB – of memory
+ * and could average about 450 kilo instructions per second.
+ * Saving memory was critical, characters were encoded in ASCII, students where
+ * teached in structured programming using PASCAL.
+ *
+ * A lot has changed eversince – and many things haven't. Porting patgen to
+ * JavaScript/ES6/node.js is aimed at:
+ * - learning how patgen works
+ * - providing software that runs acceptably fast on current computers
+ * - providing a program that can be easily used to produce patterns
+ *
+ * But why JavaScript?
+ * - JavaScript runs on every computer that has at least a browser installed
+ * - JavaScript has native Unicode support
+ * - It's the language I know best
+ *
+ * CODING STANDARDS
+ * The first version was a more or less 1:1 port from PASCAL to JavaScript.
+ * The source is now in a refactoring process where it is step-by-step made
+ * more JavaScript-alike.
+ * Identifiers copied from the original typically have under_scores in their
+ * names, while refactored code uses camelCase.
+ * The source is continuously linted by JSLint.
+ * The API may change and is not intended to be the same as of the original.
+ * Resulting patterns have to be identical to the patterns computed by patgen
+ * given the same input (except for their ordering and encoding).
+ *
+ * DISCLAIMER
+ *
+ *
+ * ERRORS
+ *
+ *
+ * LICENCE
+ *
+ *
+ */
+
 /*jslint browser: false, node: true, es6: true, for: true, fudge: true*/
 "use strict";
 
 /**
- * Read the files given as arguments and create a `File`
+ * Read the files given as arguments and create a `File`-Object
  * `File` is a proxy that holds the content of the readed
  * file in memory – here we trade memory for I/O
  * (typically the dictionary files are < 10MB)
- * Todo: Error if a file's missing
+ * Todo: Error handling
  */
 var fs = require("fs");
 
@@ -57,29 +124,22 @@ function readFilePromise(path) {
     });
 }
 
-var dictionaryProm = readFilePromise(process.argv[2]),
-    patternInProm = readFilePromise(process.argv[3]),
-    patout = new File(""),
-    dictionary,
-    patterns;
+/**
+ * Get promises for input files
+ */
+const dictionaryProm = readFilePromise(process.argv[2]);
+const patternInProm = readFilePromise(process.argv[3]);
 
 /**
- * Some helper functions
+ * Create output files
  */
-//block 3
-function print(s) {
-    process.stdout.write(s);
-}
+const patout = new File("");
 
-//block 10
-function error(msg) {
-    console.log(msg);
-    process.exit(0);
-
-}
-function overflow(msg1) {
-    error("PATGEN capacity exceeded, sorry [" + msg1 + "].");
-}
+/**
+ * variables for fullfilled file promises
+ */
+var dictionary;
+var patterns;
 
 
 /**
@@ -90,18 +150,15 @@ function overflow(msg1) {
  * [] Check if some var/let can be redefined as const
  * [] use let instead of var (beware no-opt of compound let statements)
  */
-//block 1
 
 /**
  * First line printed out when patgen is run
  */
 const banner = "This is patgen.js for node.js, Version 1.0b";
 
-//Constants of the outer block 27
 /**
  * space for pattern trie
  * originally this was 55000, but that's to small for the german dictionary
- * Todo: make this dynamic
  */
 const trie_size = 55000 * 8;
 
@@ -109,9 +166,8 @@ const trie_size = 55000 * 8;
  * space for pattern count trie, must be less than trie_size and greater
  * than the number of occurrences of any pattern in the dictionary
  * originally this was 26000, but that's to small for the german dictionary
- * Todo: make this dynamic
  */
-const triec_size = 26000 * 8;
+const triec_size = 32000 * 8;
 
 /**
  * size of output hash table, should be a multiple of 510 (= 2*255)
@@ -138,43 +194,73 @@ const max_len = 50;
  * maximum length of input lines, at least max_len
  * originaly this was const set to 80, but it's faster
  * to dynamically assign the buf-array and push new values.
- *
  */
 var buf_len;
 
-//block 12
-var lastInternalCharCode = 127;
+/**
+ * lastInternalCharCode is the highest index used in xext
+ */
+var lastInternalCharCode;
 
-//block 3
-var pat_start,
-    pat_finish,
-    hyph_start,
-    hyph_finish,
-    good_wt,
-    bad_wt,
-    thresh;
+/**
+ * The following vars are the parameters for patgen
+ * They are prompted to the user for each run.
+ */
+var pat_start;
+var pat_finish;
+var hyph_start;
+var hyph_finish;
+var good_wt;
+var bad_wt;
+var thresh;
 
-//block 18
-//var invalid_code = 0;
+/**
+ * For the purpose of this program (see trie creation) each character
+ * is mapped to an internal code of type int without any relations to
+ * some encoding. The characters '0'...'9' and '.' have special meanings
+ * and are used in every language and thus always mapped to the same int:
+ * '0'->0 ... '9'->9 and '.'->10 (see function initialize())
+ * '.' marks the beginning an end of a word. A pattern like '.ab1' only matches
+ * at the beginning of a word that begins with 'ab' while a pattern like 'ab1'
+ * matches at every position in a word.
+ */
+var edge_of_word;
 
-//block 20
-var edge_of_word = 10;
-
-//block 22
+/**
+ * When reading the dictionary and patterns the characters have to be
+ * recognized as fast as possible. Reading the charCode and then decide
+ * what kind of character it is takes to much time.
+ * Thus we traverse the dictionary at the beginning and collect all characters,
+ * map them to a internalCharCode and assign them a class.
+ *
+ * xint: char -> internalCharCode
+ * xext: internalCharCode -> char
+ * xdig: value -> digit (todo: remove and use Number(v).toString())
+ * xhyf: value -> chars '-.*'
+ * xclass: char -> one of the following classes:
+ *
+ * space_class: chars ' ' and '\n' (delimiters)
+ * digit_class: chars '0'...'9' (hyphen values or weights)
+ * hyf_class: chars '.', '-' and '*' (bad, missed, good hyphens)
+ * letter_class: chars representing a letter
+ * invalid_class: chars that should not occur
+ *
+ * The only char that changes its class is '.':
+ * reading dictionary: invalid_class
+ * reading patterns: letter_class
+ * writing pattmp: hyf_class
+ */
 const
     space_class = 0,
     digit_class = 1,
     hyf_class = 2,
     letter_class = 3,
-    escape_class = 4,
-    invalid_class = 5,
-    no_hyf = 0,
-    err_hyf = 1,
-    is_hyf = 2,
-    found_hyf = 3;
+    invalid_class = 4,
+    no_hyf = 0,// ''
+    err_hyf = 1,// '.'
+    is_hyf = 2,// '-'
+    found_hyf = 3;// '*'
 
-
-//block 23
 var xclass = {},
     xint = {},
     xdig = [],
@@ -185,36 +271,12 @@ var xclass = {},
 var cmin = 1;
 var cmax;
 
-
-function initialize2() {
-    String("0123456789").split("").forEach(function (c, i) {
-        xext[i] = c;
-        xint[c] = i;
-        xclass[c] = digit_class;
-    });
-    xext[10] = ".";
-    xint["."] = 10;
-    xint["*"] = 10;
-    xint["-"] = 10;
-    edge_of_word = 10;
-    xclass["."] = hyf_class;
-    xclass["*"] = hyf_class;
-    xclass["-"] = hyf_class;
-    xclass[" "] = space_class;
-    xclass["\n"] = space_class;
-    //define characters for testing patterns
-    xhyf[err_hyf] = ".";
-    xhyf[is_hyf] = "-";
-    xhyf[found_hyf] = "*";
-}
-
 //block 19
 var numInternalCharCodes;
 
 //block 30
-
-
-const trie_c = new Uint32Array(trie_size),
+const
+    trie_c = new Uint32Array(trie_size),
     trie_l = new Uint32Array(trie_size),
     trie_r = new Uint32Array(trie_size),
     trie_taken = [],
@@ -239,6 +301,77 @@ var trie_max,
 
 //block 34
 var trie_root = 1;
+
+//block 44
+var triec_root = 1;
+
+//block 40
+var pat = [],
+    pat_len;
+
+//block 43
+var triec_max,
+    triec_bmax,
+    triec_count,
+    triec_kmax,
+    pat_count;
+
+//block 74
+var word = new Uint8Array(max_len),
+    dots = new Uint8Array(max_len),
+    dotw = new Uint8Array(max_len),
+    hval = new Uint8Array(max_len),
+    no_more = new Uint8Array(max_len),
+    wlen,
+    word_wt,
+    wt_chg;
+
+//block 55
+var left_hyphen_min,
+    right_hyphen_min;
+
+/**
+ * Some helper functions
+ */
+//block 3
+function print(s) {
+    process.stdout.write(s);
+}
+
+//block 10
+function error(msg) {
+    console.log(msg);
+    process.exit(0);
+
+}
+function overflow(msg1) {
+    error("PATGEN capacity exceeded, sorry [" + msg1 + "].");
+}
+
+
+function initialize() {
+    String("0123456789").split("").forEach(function (c, i) {
+        xext[i] = c;
+        xint[c] = i;
+        xclass[c] = digit_class;
+    });
+    xext[10] = ".";
+    xint["."] = 10;
+    xint["*"] = 10;
+    xint["-"] = 10;
+    edge_of_word = 10;
+    xclass["."] = hyf_class;
+    xclass["*"] = hyf_class;
+    xclass["-"] = hyf_class;
+    xclass[" "] = space_class;
+    xclass["\n"] = space_class;
+    //define characters for testing patterns
+    xhyf[err_hyf] = ".";
+    xhyf[is_hyf] = "-";
+    xhyf[found_hyf] = "*";
+}
+
+
 
 //block 35
 function first_fit() {
@@ -367,9 +500,6 @@ function new_trie_op(v, d, n) {
     }
 }
 
-//block 40
-var pat = [],
-    pat_len;
 
 //block 41
 function insert_pattern(val, dot) {
@@ -422,15 +552,8 @@ function insert_pattern(val, dot) {
     trie_r[s] = new_trie_op(val, dot, trie_r[s]);
 }
 
-//block 43
-var triec_max,
-    triec_bmax,
-    triec_count,
-    triec_kmax,
-    pat_count;
 
-//block 44
-var triec_root = 1;
+
 function init_count_trie() {
     var c;
     for (c = 0; c <= lastInternalCharCode; c += 1) {
@@ -535,15 +658,7 @@ function unpackc(b) {
     triec_taken[b] = false;
 }
 
-//block 74
-var word = new Uint8Array(max_len),
-    dots = new Uint8Array(max_len),
-    dotw = new Uint8Array(max_len),
-    hval = new Uint8Array(max_len),
-    no_more = new Uint8Array(max_len),
-    wlen,
-    word_wt,
-    wt_chg;
+
 
 //block 49
 function insertc_pat(fpos) {
@@ -628,9 +743,7 @@ function read_buf(file) {
 }
 
 
-//block 55
-var left_hyphen_min,
-    right_hyphen_min;
+
 
 //block 61
 function find_letters(b, i) {
@@ -682,6 +795,21 @@ var procesp,
     hyph_level,
     filnam = '';
 
+//block 78
+var hyf_min,
+    hyf_max,
+    hyf_len;
+
+//block 84
+var good_dot,
+    bad_dot,
+    dot_min,
+    dot_max,
+    dot_len;
+
+//block 91
+var max_pat;
+
 //block 64
 function traverse_count_trie(b, i) {
     var c,
@@ -694,15 +822,18 @@ function traverse_count_trie(b, i) {
                 traverse_count_trie(triec_l[a], i + 1);
             } else {
                 //begin block 65
-                if ((good_wt * triec_l[a]) < thresh) {
+                if ((good_wt * triec_l[a]) < thresh) { //hopeless pattern
+                    //console.log("HOPELESS:", pat.map(v => xext[v]), triec_l[a], triec_r[a]);
                     insert_pattern(max_val, pat_dot);
                     bad_pat_count += 1;
-                } else if ((good_wt * triec_l[a] - bad_wt * triec_r[a]) >= thresh) {
+                } else if ((good_wt * triec_l[a] - bad_wt * triec_r[a]) >= thresh) { //good pattern
+                    //console.log("INSERT:", pat.map(v => xext[v]), triec_l[a], triec_r[a]);
                     insert_pattern(hyph_level, pat_dot);
                     good_pat_count += 1;
                     good_count += triec_l[a];
                     bad_count += triec_r[a];
                 } else {
+                    //console.log("MORE2COME:", pat.map(v => xext[v]), triec_l[a], triec_r[a]); //can't decide yet
                     more_to_come = true;
                 }
                 //end block 65
@@ -847,8 +978,7 @@ function output_patterns(s, pat_len, indent) {
 
 //block 76
 function read_word() {
-    var c,
-        t;
+    var c;
     word[1] = edge_of_word;
     wlen = 1;
 found:
@@ -880,35 +1010,6 @@ found:
             dots[wlen] = no_hyf;
             dotw[wlen] = word_wt;
             break;
-        case escape_class:
-            wlen += 1;
-            if (wlen === max_len) {
-                print_buf();
-                overflow("word length=" + max_len);
-            }
-            //begin block 60: # = word[wlen]
-            t = trie_root;
-done:
-            while (true) {
-                t = trie_l[t] + xint[c];
-                if (trie_c[t] !== xint[c]) {
-                    bad_input("Bad represenation");
-                }
-                if (trie_r[t] !== 0) {
-                    word[wlen] = trie_r[t];
-                    break done;
-                }
-                if (buf_ptr === buf_len) {
-                    c = " ";
-                } else {
-                    buf_ptr += 1;
-                    c = buf[buf_ptr];
-                }
-            }
-            //end block 60
-            dots[wlen] = no_hyf;
-            dotw[wlen] = word_wt;
-            break;
         case invalid_class:
             bad_input("Bad character");
             break;
@@ -920,10 +1021,6 @@ done:
     word[wlen] = edge_of_word;
 }
 
-//block 78
-var hyf_min,
-    hyf_max,
-    hyf_len;
 
 
 //block 77
@@ -984,12 +1081,6 @@ function change_dots() {
     }
 }
 
-//block 84
-var good_dot,
-    bad_dot,
-    dot_min,
-    dot_max,
-    dot_len;
 
 //bloch 82
 function output_hyphenated_word() {
@@ -1112,7 +1203,7 @@ function do_dictionary() {
         console.log("processing dictionary with pat_len " + pat_len + ", pat_dot = " + pat_dot);
     }
     if (hyphp) {
-        filnam = `pattmp.${hyph_level}`;
+        filnam = `pattmp.${hyph_level + 1}`;
         console.log("writing " + filnam);
     }
     //begin block 89
@@ -1153,15 +1244,13 @@ function do_dictionary() {
     }
 }
 
-//block 91
-var max_pat;
+
 
 //block 90
 function read_patterns() {
     var c,
         d,
-        i,
-        t;
+        i;
     xclass["."] = letter_class;
     xint["."] = edge_of_word;
     level_pattern_count = 0;
@@ -1193,29 +1282,6 @@ found:  do {
                 pat_len += 1;
                 hval[pat_len] = 0;
                 pat[pat_len] = xint[c];
-                break;
-            case escape_class:
-                pat_len += 1;
-                hval[pat_len] = 0;
-                //begin block 60: # = pat[pat_len]
-                t = trie_root;
-                while (true) {
-                    t = trie_l[t] + xint[c];
-                    if (trie_c[t] !== xint[c]) {
-                        bad_input("Bad represenation");
-                    }
-                    if (trie_r[t] !== 0) {
-                        pat[pat_len] = trie_r[t];
-                        break;
-                    }
-                    if (buf_ptr === buf_len) {
-                        c = " ";
-                    } else {
-                        buf_ptr += 1;
-                        c = buf[buf_ptr];
-                    }
-                }
-                //end block 60
                 break;
             default:
                 bad_input("Bad character");
@@ -1539,7 +1605,7 @@ function getLeftRightHyphenMin() {
 
 function init() {
     console.log(banner);
-    initialize2();
+    initialize();
     getLeftRightHyphenMin();
 }
 
