@@ -198,11 +198,6 @@ const max_len = 50;
 var buf_len;
 
 /**
- * lastInternalCharCode is the highest index used in xext
- */
-var lastInternalCharCode;
-
-/**
  * The following vars are the parameters for patgen
  * They are prompted to the user for each run.
  */
@@ -235,7 +230,7 @@ var edge_of_word;
  *
  * xint: char -> internalCharCode
  * xext: internalCharCode -> char
- * xdig: value -> digit (todo: remove and use Number(v).toString())
+ * xdig: value -> digit
  * xhyf: value -> chars '-.*'
  * xclass: char -> one of the following classes:
  *
@@ -267,30 +262,46 @@ var xclass = {},
     xext = [],
     xhyf = [];
 
-//block 25
-var cmin = 1;
-var cmax;
+/**
+ * cmin...cmax is the range of internalCharCodes (cmax = xext.length - 1)
+ * We start at 1 since 0:'0' will never be used in dictionary or pattern
+ * cnum is the number of internalCharCodes (cnum = xext.length)
+ */
+const cmin = 1;
+var cmax,
+    cnum;
 
-//block 19
-var numInternalCharCodes;
-
-//block 30
+/**
+ * The trie is stored in separate typed arrays:
+ * trie_* (pattern trie)
+ * triec_* (pattern count trie)
+ * *_c (char as internalCharCode)
+ * *_l (link resp good count)
+ * *_r (back resp bad count or output)
+ * *_taken (1: triebase is taken, 0: triebase is free)
+ * ops: outputs (Hash-object with three properties)
+ */
 const
     trie_c = new Uint32Array(trie_size),
     trie_l = new Uint32Array(trie_size),
     trie_r = new Uint32Array(trie_size),
-    trie_taken = [],
+    trie_taken = new Uint8Array(trie_size),
     triec_c = new Uint32Array(triec_size),
     triec_l = new Uint32Array(triec_size),
     triec_r = new Uint32Array(triec_size),
-    triec_taken = [],
+    triec_taken = new Uint8Array(trie_size),
     ops = [];
 
-//block 31
-var trieq_c = new Uint32Array(50),
+/**
+ * When some trie state is being worked on, an unpacked version of the state
+ * is kept in position 1..qmax of trieq_*
+ * qmax_thresh controls the density of first-fit packing
+ */
+const
+    trieq_c = new Uint32Array(50),
     trieq_l = new Uint32Array(50),
-    trieq_r = new Uint32Array(50),
-    qmax,
+    trieq_r = new Uint32Array(50);
+var qmax,
     qmax_thresh;
 
 //block 33
@@ -392,18 +403,18 @@ function first_fit() {
         t = trie_l[t];
         s = t - trieq_c[1];
         //block 37
-        if (s > trie_size - numInternalCharCodes) {
+        if (s > trie_size - cnum) {
             overflow(trie_size + " pattern trie nodes");
         }
         while (trie_bmax < s) {
             trie_bmax += 1;
-            trie_taken[trie_bmax] = false;
-            trie_c[trie_bmax + lastInternalCharCode] = 0;
-            trie_l[trie_bmax + lastInternalCharCode] = trie_bmax + numInternalCharCodes;
-            trie_r[trie_bmax + numInternalCharCodes] = trie_bmax + lastInternalCharCode;
+            trie_taken[trie_bmax] = 0;
+            trie_c[trie_bmax + cmax] = 0;
+            trie_l[trie_bmax + cmax] = trie_bmax + cnum;
+            trie_r[trie_bmax + cnum] = trie_bmax + cmax;
         }
         // end block 37
-        if (!trie_taken[s]) {
+        if (trie_taken[s] === 0) {
             for (q = qmax; q >= 2; q -= 1) {
                 if (trie_c[s + trieq_c[q]] !== 0) {
                     continueLoop = true;
@@ -426,7 +437,7 @@ function first_fit() {
             trie_max = t;
         }
     }
-    trie_taken[s] = true;
+    trie_taken[s] = 1;
     return s;
 }
 
@@ -449,23 +460,23 @@ function unpack(s) {
             trie_c[t] = 0;
         }
     }
-    trie_taken[s] = false;
+    trie_taken[s] = 0;
 }
 //block 34
 function init_pattern_trie() {
     var c, //internal_code
         h; //opt_type
-    for (c = 0; c <= lastInternalCharCode; c += 1) {
+    for (c = 0; c <= cmax; c += 1) {
         trie_c[trie_root + c] = c;
         trie_l[trie_root + c] = 0;
         trie_r[trie_root + c] = 0;
-        trie_taken[trie_root + c] = false;
+        trie_taken[trie_root + c] = 0;
     }
-    trie_taken[trie_root] = true;
+    trie_taken[trie_root] = 1;
     trie_bmax = trie_root;
-    trie_max = trie_root + lastInternalCharCode;
-    trie_count = numInternalCharCodes;
-    qmax_thresh = 5;
+    trie_max = trie_root + cmax;
+    trie_count = cnum;
+    qmax_thresh = 1;
     trie_l[0] = trie_max + 1;
     trie_r[trie_max + 1] = 0;
     for (h = 1; h <= max_ops; h += 1) {
@@ -556,16 +567,16 @@ function insert_pattern(val, dot) {
 
 function init_count_trie() {
     var c;
-    for (c = 0; c <= lastInternalCharCode; c += 1) {
+    for (c = 0; c <= cmax; c += 1) {
         triec_c[triec_root + c] = c;
         triec_l[triec_root + c] = 0;
         triec_r[triec_root + c] = 0;
-        triec_taken[triec_root + c] = false;
+        triec_taken[triec_root + c] = 0;
     }
-    triec_taken[triec_root] = true;
+    triec_taken[triec_root] = 1;
     triec_bmax = triec_root;
-    triec_max = triec_root + lastInternalCharCode;
-    triec_count = numInternalCharCodes;
+    triec_max = triec_root + cmax;
+    triec_count = cnum;
     triec_kmax = 4096;
     triec_l[0] = triec_max + 1;
     triec_r[triec_max + 1] = 0;
@@ -590,7 +601,7 @@ function firstc_fit() {
         a = triec_l[a];
         b = a - trieq_c[1];
         //begin block 47
-        if (b > (triec_kmax - numInternalCharCodes)) {
+        if (b > (triec_kmax - cnum)) {
             if (triec_kmax === triec_size) {
                 overflow(triec_size + " count trie nodes");
             }
@@ -603,13 +614,13 @@ function firstc_fit() {
         }
         while (triec_bmax < b) {
             triec_bmax += 1;
-            triec_taken[triec_bmax] = false;
-            triec_c[triec_bmax + lastInternalCharCode] = 0;
-            triec_l[triec_bmax + lastInternalCharCode] = triec_bmax + numInternalCharCodes;
-            triec_r[triec_bmax + numInternalCharCodes] = triec_bmax + lastInternalCharCode;
+            triec_taken[triec_bmax] = 0;
+            triec_c[triec_bmax + cmax] = 0;
+            triec_l[triec_bmax + cmax] = triec_bmax + cnum;
+            triec_r[triec_bmax + cnum] = triec_bmax + cmax;
         }
         //end block 47
-        if (!triec_taken[b]) {
+        if (triec_taken[b] === 0) {
             for (q = qmax; q >= 2; q -= 1) {
                 if (triec_c[b + trieq_c[q]] !== 0) {
                     continueLoop = true;
@@ -632,7 +643,7 @@ function firstc_fit() {
             triec_max = a;
         }
     }
-    triec_taken[b] = true;
+    triec_taken[b] = 1;
     return b;
 }
 
@@ -655,7 +666,7 @@ function unpackc(b) {
             triec_c[a] = 0;
         }
     }
-    triec_taken[b] = false;
+    triec_taken[b] = 0;
 }
 
 
@@ -754,7 +765,7 @@ function find_letters(b, i) {
     if (i === 0) {
         init_count_trie();
     }
-    for (c = cmin; c <= lastInternalCharCode; c += 1) {
+    for (c = cmin; c <= cmax; c += 1) {
         a = b + c;
         if (trie_c[a] === c) {
             pat[i] = c;
@@ -909,7 +920,7 @@ function delete_patterns(s) {
         }
     }
     if (all_freed) {
-        trie_taken[s] = false;
+        trie_taken[s] = 0;
         s = 0;
     }
     return s;
@@ -1552,8 +1563,7 @@ function collectAndSetChars() {
     });
     xdig = xext.slice(0, 10);
     cmax = xext.length - 1;
-    numInternalCharCodes = xext.length;
-    lastInternalCharCode = numInternalCharCodes - 1;
+    cnum = xext.length;
     main();
 }
 
