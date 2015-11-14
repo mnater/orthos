@@ -295,7 +295,10 @@ const
 /**
  * When some trie state is being worked on, an unpacked version of the state
  * is kept in position 1..qmax of trieq_*
- * qmax_thresh controls the density of first-fit packing
+ * qmax_thresh controls the density of first-fit packing (0: sparse)
+ * Defaults to 5: After deleting outputs this is set to 7
+ * because the trie is sparser
+ * Todo: investigate this. Maybe space could be treated for speed
  */
 const
     trieq_c = new Uint32Array(50),
@@ -304,54 +307,99 @@ const
 var qmax,
     qmax_thresh;
 
-//block 33
-var trie_max,
-    trie_bmax,
-    trie_count,
-    op_count;
+var trie_max,//maximum occupied trie node
+    trie_bmax,//maximum base of trie family
+    trie_count,//number of occupied trie nodes, for space usage statistics
+    op_count;//number of outpust in hash table
 
-//block 34
+
+/**
+ * The trie_root is on position 1. A link to 0 marks the end of a pattern
+ */
 var trie_root = 1;
-
-//block 44
 var triec_root = 1;
 
-//block 40
-var pat = [],
+/**
+ * pat is the current pattern of length pat_len
+ */
+var pat = new Uint32Array(50),
     pat_len;
 
-//block 43
-var triec_max,
-    triec_bmax,
-    triec_count,
-    triec_kmax,
-    pat_count;
+var triec_max,//maximum occupied trie node
+    triec_bmax,//maximum base of trie family
+    triec_count,//number of occupied trie nodes, for space usage statistics
+    triec_kmax,//shows growth of trie during pass
+    pat_count;//number of patterns in count trie
 
-//block 74
-var word = new Uint8Array(max_len),
-    dots = new Uint8Array(max_len),
-    dotw = new Uint8Array(max_len),
-    hval = new Uint8Array(max_len),
-    no_more = new Uint8Array(max_len),
-    wlen,
-    word_wt,
-    wt_chg;
+var word = new Uint8Array(max_len),//current word
+    dots = new Uint8Array(max_len),//current hyphens
+    dotw = new Uint8Array(max_len),//dot weights
+    hval = new Uint8Array(max_len),//hyphenation values
+    no_more = new Uint8Array(max_len),//positions 'knocked out'
+    wlen,//length of current word
+    word_wt,//the global word weight
+    wt_chg;//indicates word_wt has changed
 
 //block 55
-var left_hyphen_min,
-    right_hyphen_min;
+var left_hyphen_min,//minimal length of string before first hyphenatiom
+    right_hyphen_min;//minimal length of string after last hyphenatiom
+
+//block 66
+var good_pat_count,//number of good patterns added at end of pass
+    bad_pat_count,//number of bad patterns added at end of pass
+    good_count,//good hyphen count
+    bad_count,//bad hyphen count
+    miss_count,//missed hyphen coung
+    level_pattern_count,//number of good patterns at level
+    more_to_come;//set to true if the quality of a pattern is ambiguous
+
+/**
+ * If hyphp is set to true, do_dictionary will write out a copy of the
+ * dictionary as hyphenated by the current set of patterns. If procesp is
+ * set to true, do_dictionary will collect pattern statistics for patterns
+ * with length pat_len and hyphen position pat_dot, at level hyph_level.
+ */
+var procesp,
+    hyphp,
+    pat_dot,
+    hyph_level,
+    filnam = '';
+
+//block 78
+var hyf_min,
+    hyf_max,
+    hyf_len;
+
+//block 84
+var good_dot,
+    bad_dot,
+    dot_min,
+    dot_max,
+    dot_len;
+
+//block 91
+var max_pat;
 
 /**
  * Some helper functions
  */
-//block 3
+/*const
+    cp = require("child_process"),
+    logger = cp.fork("logger.js");*/
+
 function print(s) {
+    //logger.send(s);
     process.stdout.write(s);
+}
+
+function println(s) {
+    //logger.send(s + "\n");
+    process.stdout.write(s + "\n");
 }
 
 //block 10
 function error(msg) {
-    console.log(msg);
+    println(msg);
     process.exit(0);
 
 }
@@ -476,7 +524,7 @@ function init_pattern_trie() {
     trie_bmax = trie_root;
     trie_max = trie_root + cmax;
     trie_count = cnum;
-    qmax_thresh = 1;
+    qmax_thresh = 5;
     trie_l[0] = trie_max + 1;
     trie_r[trie_max + 1] = 0;
     for (h = 1; h <= max_ops; h += 1) {
@@ -733,7 +781,7 @@ var buf = [],
 
 //block 53
 function print_buf() {
-    console.log(buf.join(""));
+    println(buf.join(""));
 }
 
 function bad_input(msg) {
@@ -790,36 +838,7 @@ function find_letters(b, i) {
     }
 }
 
-//block 66
-var good_pat_count,
-    bad_pat_count,
-    good_count,
-    bad_count,
-    miss_count,
-    level_pattern_count,
-    more_to_come;
 
-//block 87
-var procesp,
-    hyphp,
-    pat_dot,
-    hyph_level,
-    filnam = '';
-
-//block 78
-var hyf_min,
-    hyf_max,
-    hyf_len;
-
-//block 84
-var good_dot,
-    bad_dot,
-    dot_min,
-    dot_max,
-    dot_len;
-
-//block 91
-var max_pat;
 
 //block 64
 function traverse_count_trie(b, i) {
@@ -834,17 +853,17 @@ function traverse_count_trie(b, i) {
             } else {
                 //begin block 65
                 if ((good_wt * triec_l[a]) < thresh) { //hopeless pattern
-                    //console.log("HOPELESS:", pat.map(v => xext[v]), triec_l[a], triec_r[a]);
+                    //println("HOPELESS:", pat.map(v => xext[v]), triec_l[a], triec_r[a]);
                     insert_pattern(max_val, pat_dot);
                     bad_pat_count += 1;
                 } else if ((good_wt * triec_l[a] - bad_wt * triec_r[a]) >= thresh) { //good pattern
-                    //console.log("INSERT:", pat.map(v => xext[v]), triec_l[a], triec_r[a]);
+                    //println("INSERT:", pat.map(v => xext[v]), triec_l[a], triec_r[a]);
                     insert_pattern(hyph_level, pat_dot);
                     good_pat_count += 1;
                     good_count += triec_l[a];
                     bad_count += triec_r[a];
                 } else {
-                    //console.log("MORE2COME:", pat.map(v => xext[v]), triec_l[a], triec_r[a]); //can't decide yet
+                    //println("MORE2COME:", pat.map(v => xext[v]), triec_l[a], triec_r[a]); //can't decide yet
                     more_to_come = true;
                 }
                 //end block 65
@@ -864,17 +883,17 @@ function collect_count_trie() {
     print(good_pat_count + " good and " + bad_pat_count + " bad patterns added");
     level_pattern_count += good_pat_count;
     if (more_to_come) {
-        console.log(" (more to come)");
+        println(" (more to come)");
     } else {
-        console.log(" ");
+        println(" ");
     }
     print("finding " + good_count + " good and " + bad_count + " bad hyphens");
     if (good_pat_count > 0) {
-        console.log(" efficiency = " + Number(good_count / (good_pat_count + bad_count / (thresh / good_wt))).toFixed(2));
+        println(" efficiency = " + Number(good_count / (good_pat_count + bad_count / (thresh / good_wt))).toFixed(2));
     } else {
-        console.log(" ");
+        println(" ");
     }
-    console.log("pattern trie has " + trie_count + " nodes, trie_max = " + trie_max + ", " + op_count + " outputs");
+    println("pattern trie has " + trie_count + " nodes, trie_max = " + trie_max + ", " + op_count + " outputs");
 }
 
 //block 68
@@ -940,7 +959,7 @@ function delete_bad_patterns() {
             op_count -= 1;
         }
     }
-    console.log((old_trie_count - trie_count) + " nodes and " + (old_op_count - op_count) + " outputs deleted");
+    println((old_trie_count - trie_count) + " nodes and " + (old_op_count - op_count) + " outputs deleted");
     qmax_thresh = 7;
 }
 
@@ -1211,11 +1230,11 @@ function do_dictionary() {
     //end block 85
     if (procesp) {
         init_count_trie();
-        console.log("processing dictionary with pat_len " + pat_len + ", pat_dot = " + pat_dot);
+        println("processing dictionary with pat_len " + pat_len + ", pat_dot = " + pat_dot);
     }
     if (hyphp) {
         filnam = `pattmp.${hyph_level + 1}`;
-        console.log("writing " + filnam);
+        println("writing " + filnam);
     }
     //begin block 89
     dictionary.reset();
@@ -1238,18 +1257,18 @@ function do_dictionary() {
     }
     //end block 89
     //r.close(dictionary);
-    console.log(" ");
-    console.log(good_count + " good, " + bad_count + " bad, " + miss_count + " missed");
+    println(" ");
+    println(good_count + " good, " + bad_count + " bad, " + miss_count + " missed");
     if ((good_count + miss_count) > 0) {
-        console.log(Number(100 * good_count / (good_count + miss_count)).toFixed(2) + " %, " + Number(100 * bad_count / (good_count + miss_count)).toFixed(2) + " %, " + Number(100 * miss_count / (good_count + miss_count)).toFixed(2) + " %");
+        println(Number(100 * good_count / (good_count + miss_count)).toFixed(2) + " %, " + Number(100 * bad_count / (good_count + miss_count)).toFixed(2) + " %, " + Number(100 * miss_count / (good_count + miss_count)).toFixed(2) + " %");
     }
     if (procesp) {
-        console.log(pat_count + " patterns, " + triec_count + " nodes in count trie, " + "triec_max = " + triec_max);
+        println(pat_count + " patterns, " + triec_count + " nodes in count trie, " + "triec_max = " + triec_max);
     }
     if (hyphp) {
         pattmp.save(filnam).catch(
             function (err) {
-                console.log(err);
+                println(err);
             }
         );
     }
@@ -1317,8 +1336,8 @@ found:  do {
         }
     }
     //r.close(patterns);
-    console.log(level_pattern_count + " patterns read in");
-    console.log("pattern trie has " + trie_count + " nodes, trie_max = " + trie_max + ", " + op_count + " outputs");
+    println(level_pattern_count + " patterns read in");
+    println("pattern trie has " + trie_count + " nodes, trie_max = " + trie_max + ", " + op_count + " outputs");
 }
 
 
@@ -1355,7 +1374,7 @@ function generateLevel() {
     }
     //end block 96
     delete_bad_patterns();
-    console.log("total of " + level_pattern_count + " patterns at hyph_level " + hyph_level);
+    println("total of " + level_pattern_count + " patterns at hyph_level " + hyph_level);
 }
 
 function askDoDictionary() {
@@ -1382,9 +1401,9 @@ function doLevels(currLevel) {
         hyph_level = currLevel;
         level_pattern_count = 0;
         if (hyph_level > hyph_start) {
-            console.log(" ");
+            println(" ");
         } else if (hyph_start <= max_pat) {
-            console.log("Largest hyphenation value " + max_pat + " in patterns should be less than hyph_start");
+            println("Largest hyphenation value " + max_pat + " in patterns should be less than hyph_start");
         }
         getPat(hyph_level);
     } else {
@@ -1392,13 +1411,14 @@ function doLevels(currLevel) {
         output_patterns(trie_root, 1);
         patout.save(process.argv[4]).catch(
             function (err) {
-                console.log(err);
+                println(err);
             }
         );
         //block 97
         procesp = false;
         hyphp = true;
         askDoDictionary();
+        //logger.send("SIGHUP");
     }
 }
 
@@ -1437,7 +1457,7 @@ function getGBT(currLevel) {
             generateLevel();
             doLevels(currLevel + 1);
         } else {
-            console.log("Specify good weight, bad weight, threshold>=1 !");
+            println("Specify good weight, bad weight, threshold>=1 !");
             getGBT(currLevel);
         }
     });
@@ -1472,7 +1492,7 @@ function getPat(currLevel) {
             rl.close();
             getGBT(currLevel);
         } else {
-            console.log("Specify 1<=pat_start<=pat_finish<=" + max_dot + " !");
+            println("Specify 1<=pat_start<=pat_finish<=" + max_dot + " !");
             getPat(currLevel);
         }
     });
@@ -1510,7 +1530,7 @@ function getHyph() {
             rl.close();
             doLevels(hyph_start);
         } else {
-            console.log("Specify 1<=hyph_start,hyph_finish<=" + (max_val - 1) + " !");
+            println("Specify 1<=hyph_start,hyph_finish<=" + (max_val - 1) + " !");
             getHyph();
         }
     });
@@ -1530,7 +1550,7 @@ function collectAndSetChars() {
         charsA,
         c;
     dictionary.reset();
-    console.log("collecting chars…");
+    println("collecting chars…");
     while (!dictionary.eof()) {
         c = dictionary.content.charAt(dictionary.ptr);
         if (c !== "\n" && c !== "-" && c.charCodeAt(0) > 57) {
@@ -1607,14 +1627,14 @@ function getLeftRightHyphenMin() {
             collectAndSetChars();
         } else {
             rl.close();
-            console.log("Specify 1<=left_hyphen_min,right_hyphen_min<=15 !");
+            println("Specify 1<=left_hyphen_min,right_hyphen_min<=15 !");
             getLeftRightHyphenMin();
         }
     });
 }
 
 function init() {
-    console.log(banner);
+    println(banner);
     initialize();
     getLeftRightHyphenMin();
 }
@@ -1629,7 +1649,7 @@ Promise.all([dictionaryProm, patternInProm]).then(
     }
 ).catch(
     function (values) {
-        console.log(values);
+        println(values);
     }
 );
 
