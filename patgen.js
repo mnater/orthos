@@ -1008,6 +1008,46 @@ function output_patterns(s, pat_len, indent) {
 
 //block 76
 function read_word() {
+    var c = dictionary.content[dictionary.ptr];
+    word[1] = edge_of_word;
+    wlen = 1;
+    while (xclass[c] !== space_class) {
+        switch (xclass[c]) {
+        case digit_class:
+            if (wlen === 1) {
+                if (xint[c] !== word_wt) {
+                    wt_chg = true;
+                    word_wt = xint[c];
+                }
+            } else {
+                dotw[wlen] = xint[c];
+            }
+            break;
+        case hyf_class:
+            dots[wlen] = xint[c];
+            break;
+        case letter_class:
+            wlen += 1;
+            if (wlen === max_len) {
+                print_buf();
+                overflow("word length=" + max_len);
+            }
+            word[wlen] = xint[c];
+            dots[wlen] = no_hyf;
+            dotw[wlen] = word_wt;
+            break;
+        case invalid_class:
+            bad_input("Bad character");
+            break;
+        }
+        dictionary.ptr += 1;
+        c = dictionary.content[dictionary.ptr];
+    }
+    dictionary.ptr += 1;
+    wlen += 1;
+    word[wlen] = edge_of_word;
+}
+/*function read_word() {
     var c;
     word[1] = edge_of_word;
     wlen = 1;
@@ -1049,7 +1089,7 @@ found:
     dictionary.ptr += 1;
     wlen += 1;
     word[wlen] = edge_of_word;
-}
+}*/
 
 
 
