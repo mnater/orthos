@@ -75,6 +75,7 @@
  * (typically the dictionary files are < 10MB)
  * Todo: Error handling
  */
+
 var fs = require("fs");
 
 var File = function (content) {
@@ -231,10 +232,8 @@ var edge_of_word;
  * xint: char -> internalCharCode
  * xext: internalCharCode -> char
  * xdig: value -> digit
- * xhyf: value -> chars '-.*'
  * xclass: char -> one of the following classes:
  *
- * space_class: chars ' ' and '\n' (delimiters)
  * digit_class: chars '0'...'9' (hyphen values or weights)
  * hyf_class: chars '.', '-' and '*' (bad, missed, good hyphens)
  * letter_class: chars representing a letter
@@ -246,21 +245,18 @@ var edge_of_word;
  * writing pattmp: hyf_class
  */
 const
-    space_class = 0,
     digit_class = 1,
     hyf_class = 2,
     letter_class = 3,
-    invalid_class = 4,
-    no_hyf = 0,// ''
-    err_hyf = 1,// '.'
-    is_hyf = 2,// '-'
-    found_hyf = 3;// '*'
+    no_hyf = 10,// ''
+    err_hyf = 11,// '#'
+    is_hyf = 12,// '-'
+    found_hyf = 13;// '*'
 
 var xclass = {},
     xint = {},
     xdig = [],
-    xext = [],
-    xhyf = [];
+    xext = [];
 
 /**
  * cmin...cmax is the range of internalCharCodes (cmax = xext.length - 1)
@@ -407,27 +403,36 @@ function overflow(msg1) {
     error("PATGEN capacity exceeded, sorry [" + msg1 + "].");
 }
 
-
+/**
+ * initialize() sets up xint, xext and xclass with characters that are language independent
+ */
 function initialize() {
+    //setup internal representation for digits
     String("0123456789").split("").forEach(function (c, i) {
         xext[i] = c;
         xint[c] = i;
         xclass[c] = digit_class;
     });
+    //setup IR for ".": the edge_of_word marker (can occur in pattern files)
     xext[10] = ".";
     xint["."] = 10;
-    xint["*"] = 10;
-    xint["-"] = 10;
+    xclass["."] = letter_class;
     edge_of_word = 10;
-    xclass["."] = hyf_class;
-    xclass["*"] = hyf_class;
+
+    //setup IR for "#": the err_hyf marker
+    xext[11] = "#";
+    xint["#"] = 11;
+    xclass["#"] = hyf_class;
+
+    //setup IR for "-": the is_hyf marker (occurs in dictionary)
+    xext[12] = "-";
+    xint["-"] = 12;
     xclass["-"] = hyf_class;
-    xclass[" "] = space_class;
-    xclass["\n"] = space_class;
-    //define characters for testing patterns
-    xhyf[err_hyf] = ".";
-    xhyf[is_hyf] = "-";
-    xhyf[found_hyf] = "*";
+
+    //setup IR for "*": the found_hyf marker
+    xext[13] = "*";
+    xint["*"] = 13;
+    xclass["*"] = hyf_class;
 }
 
 
@@ -796,7 +801,6 @@ function read_buf(file) {
         buf.push(file.content[file.ptr]);
         file.ptr += 1;
     } while (file.content[file.ptr] !== "\n");
-    buf.push(" ");
     buf_len = buf.length;
     file.ptr += 1;
 }
@@ -1005,14 +1009,24 @@ function output_patterns(s, pat_len, indent) {
         }
     }
 }
-
 //block 76
 function read_word() {
-    var c = dictionary.content[dictionary.ptr];
+    var cc = dictionary.content.charCodeAt(dictionary.ptr),
+        c;
     word[1] = edge_of_word;
     wlen = 1;
-    while (xclass[c] !== space_class) {
+    while (cc !== 10) {
+        c = String.fromCharCode(cc);
         switch (xclass[c]) {
+        case letter_class:
+            wlen += 1;
+            word[wlen] = xint[c];
+            dots[wlen] = no_hyf;
+            dotw[wlen] = word_wt;
+            break;
+        case hyf_class:
+            dots[wlen] = xint[c];
+            break;
         case digit_class:
             if (wlen === 1) {
                 if (xint[c] !== word_wt) {
@@ -1023,74 +1037,17 @@ function read_word() {
                 dotw[wlen] = xint[c];
             }
             break;
-        case hyf_class:
-            dots[wlen] = xint[c];
-            break;
-        case letter_class:
-            wlen += 1;
-            if (wlen === max_len) {
-                print_buf();
-                overflow("word length=" + max_len);
-            }
-            word[wlen] = xint[c];
-            dots[wlen] = no_hyf;
-            dotw[wlen] = word_wt;
-            break;
-        case invalid_class:
+        default:
             bad_input("Bad character");
             break;
         }
         dictionary.ptr += 1;
-        c = dictionary.content[dictionary.ptr];
+        cc = dictionary.content.charCodeAt(dictionary.ptr);
     }
     dictionary.ptr += 1;
     wlen += 1;
     word[wlen] = edge_of_word;
 }
-/*function read_word() {
-    var c;
-    word[1] = edge_of_word;
-    wlen = 1;
-found:
-    do {
-        c = dictionary.content[dictionary.ptr];
-        switch (xclass[c]) {
-        case space_class:
-            break found;
-        case digit_class:
-            if (wlen === 1) {
-                if (xint[c] !== word_wt) {
-                    wt_chg = true;
-                    word_wt = xint[c];
-                }
-            } else {
-                dotw[wlen] = xint[c];
-            }
-            break;
-        case hyf_class:
-            dots[wlen] = xint[c];
-            break;
-        case letter_class:
-            wlen += 1;
-            if (wlen === max_len) {
-                print_buf();
-                overflow("word length=" + max_len);
-            }
-            word[wlen] = xint[c];
-            dots[wlen] = no_hyf;
-            dotw[wlen] = word_wt;
-            break;
-        case invalid_class:
-            bad_input("Bad character");
-            break;
-        }
-        dictionary.ptr += 1;
-    } while (true);
-    dictionary.ptr += 1;
-    wlen += 1;
-    word[wlen] = edge_of_word;
-}*/
-
 
 
 //block 77
@@ -1163,7 +1120,7 @@ function output_hyphenated_word() {
     for (dpos = 2; dpos <= wlen - 2; dpos += 1) {
         w2w += xext[word[dpos]];
         if (dots[dpos] !== no_hyf) {
-            w2w += xhyf[dots[dpos]];
+            w2w += xext[dots[dpos]];
         }
         if (dotw[dpos] !== word_wt) {
             w2w += xdig[dotw[dpos]];
@@ -1226,6 +1183,8 @@ function do_word() {
 }
 
 
+
+
 //block 88
 function do_dictionary() {
     good_count = 0;
@@ -1234,15 +1193,6 @@ function do_dictionary() {
     word_wt = 1;
     wt_chg = false;
     dictionary.reset();
-    //begin block 75
-    xclass["."] = invalid_class;
-    xclass[xhyf[err_hyf]] = hyf_class;
-    xint[xhyf[err_hyf]] = no_hyf;
-    xclass[xhyf[is_hyf]] = hyf_class;
-    xint[xhyf[is_hyf]] = is_hyf;
-    xclass[xhyf[found_hyf]] = hyf_class;
-    xint[xhyf[found_hyf]] = is_hyf;
-    //end block 75
     //begin block 79
     hyf_min = left_hyphen_min + 1;
     hyf_max = right_hyphen_min + 1;
@@ -1333,11 +1283,9 @@ function read_patterns() {
         pat_len = 0;
         buf_ptr = 0;
         hval[0] = 0;
-found:  do {
+        while (buf_ptr < buf_len) {
             c = buf[buf_ptr];
             switch (xclass[c]) {
-            case space_class:
-                break found;
             case digit_class:
                 d = xint[c];
                 if (d >= max_val) {
@@ -1354,10 +1302,10 @@ found:  do {
                 pat[pat_len] = xint[c];
                 break;
             default:
-                bad_input("Bad character");
+                bad_input("Bad character: ", c);
             }
             buf_ptr += 1;
-        } while (buf_ptr !== buf_len);
+        }
         //end block 92
         //block 93
         if (pat_len > 0) {
@@ -1379,7 +1327,6 @@ found:  do {
     println(level_pattern_count + " patterns read in");
     println("pattern trie has " + trie_count + " nodes, trie_max = " + trie_max + ", " + op_count + " outputs");
 }
-
 
 
 //block 94
@@ -1461,7 +1408,7 @@ function doLevels(currLevel) {
         //logger.send("SIGHUP");
     }
 }
-
+var profiler = require('v8-profiler');
 function getGBT(currLevel) {
     var readline = require('readline'),
         rl = readline.createInterface(process.stdin, process.stdout),
@@ -1494,7 +1441,13 @@ function getGBT(currLevel) {
             bad_wt = n2;
             thresh = n3;
             rl.close();
+            profiler.startProfiling('1', true);
             generateLevel();
+            var profile1 = profiler.stopProfiling();
+            profile1.export(function (ignore, result) {
+                fs.writeFileSync('profile1.cpuprofile', result);
+                profile1.delete();
+            });
             doLevels(currLevel + 1);
         } else {
             println("Specify good weight, bad weight, threshold>=1 !");
@@ -1588,20 +1541,21 @@ function main() {
 function collectAndSetChars() {
     var charsS = new Set(),
         charsA,
-        c;
+        cc;
     dictionary.reset();
     println("collecting chars…");
     while (!dictionary.eof()) {
-        c = dictionary.content.charAt(dictionary.ptr);
-        if (c !== "\n" && c !== "-" && c.charCodeAt(0) > 57) {
-            charsS.add(c);
+        cc = dictionary.content.charCodeAt(dictionary.ptr);
+        if (cc === 45 || cc >= 65) {
+            charsS.add(cc);
         }
         dictionary.ptr += 1;
     }
     charsA = Array.from(charsS);
-    charsA.sort();
-    charsA.forEach(function setChar(c) {
-        var i = xint[c];
+    charsA.sort((a, b) => a - b);
+    charsA.forEach(function setChar(cc) {
+        var c = String.fromCharCode(cc),
+            i = xint[c];
         if (i === undefined) {
             if (c === c.toUpperCase()) {
                 //c is upperCase -> try lowerCase
