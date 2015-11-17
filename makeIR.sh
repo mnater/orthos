@@ -1,7 +1,7 @@
 #!/bin/bash
 # -*- coding: utf-8 -*-
 
-DICT="./wortliste_short.txt"
+DICT="./wortliste_extr.txt"
 i=1
 
 rm -f pattern.0

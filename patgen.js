@@ -361,20 +361,18 @@ var procesp,
     hyph_level,
     filnam = '';
 
-//block 78
-var hyf_min,
-    hyf_max,
-    hyf_len;
+var hyf_min,//left_hyphen_min + 1
+    hyf_max,//right_hyphen_min + 1
+    hyf_len;//hyf_min + hyf_max
 
-//block 84
-var good_dot,
-    bad_dot,
-    dot_min,
-    dot_max,
-    dot_len;
+var good_dot,//is_hyf in odd (collecting) passes, err_hyf in even passes
+    bad_dot,//no_hyf in odd (collecting) passes, found_hyf in even passes
+    dot_min,//analoguos to hyf_min
+    dot_max,//analoguos to hyf_max
+    dot_len;//analoguos to hyf_len
 
 //block 91
-var max_pat;
+var max_pat;//largest hyphenation value found in any pattern
 
 /**
  * Some helper functions
@@ -1049,7 +1047,6 @@ function read_word() {
     word[wlen] = edge_of_word;
 }
 
-
 //block 77
 function hyphenate() {
     var spos = 0,
@@ -1064,7 +1061,7 @@ function hyphenate() {
         hval[spos] = 0;
         fpos = spos + 1;
         t = trie_root + word[fpos];
-        do {
+        while (trie_c[t] === word[fpos]) {
             h = trie_r[t];
             while (h > 0) {
                 //begin block 80
@@ -1087,7 +1084,7 @@ function hyphenate() {
             }
             fpos += 1;
             t += word[fpos];
-        } while (trie_c[t] === word[fpos]);
+        }
     }
 }
 
@@ -1111,33 +1108,31 @@ function change_dots() {
 
 //bloch 82
 function output_hyphenated_word() {
-    var dpos,
-        w2w = "";
+    var dpos;
     if (wt_chg) {
-        w2w += xdig[word_wt];
+        pattmp.write(xdig[word_wt]);
         wt_chg = false;
     }
     for (dpos = 2; dpos <= wlen - 2; dpos += 1) {
-        w2w += xext[word[dpos]];
+        pattmp.write(xext[word[dpos]]);
         if (dots[dpos] !== no_hyf) {
-            w2w += xext[dots[dpos]];
+            pattmp.write(xext[dots[dpos]]);
         }
         if (dotw[dpos] !== word_wt) {
-            w2w += xdig[dotw[dpos]];
+            pattmp.write(xdig[dotw[dpos]]);
         }
     }
-    w2w += xext[word[wlen - 1]];
-    pattmp.write(w2w + "\n");
+    pattmp.write(xext[word[wlen - 1]] + "\n");
 }
 
 //block 83
 function do_word() {
     var spos,
-        dpos,
+        dpos = wlen - dot_max,
         fpos,
         a,
         goodp;
-    for (dpos = wlen - dot_max; dpos >= dot_min; dpos -= 1) {
+    while (dpos >= dot_min) {
         spos = dpos - pat_dot;
         fpos = spos + pat_len;
         //begin block 86
@@ -1154,11 +1149,7 @@ function do_word() {
                         break;
                     }
                 }
-                if (goodp) {
-                    triec_l[a] += dotw[dpos];
-                } else {
-                    triec_r[a] += dotw[dpos];
-                }
+                triec_l[a] += dotw[dpos];
             } else if (dots[dpos] === bad_dot) {
                 goodp = false;
                 spos += 1;
@@ -1171,14 +1162,11 @@ function do_word() {
                         break;
                     }
                 }
-                if (goodp) {
-                    triec_l[a] += dotw[dpos];
-                } else {
-                    triec_r[a] += dotw[dpos];
-                }
+                triec_r[a] += dotw[dpos];
             }
             //end block 86
         }
+        dpos -= 1;
     }
 }
 
@@ -1192,13 +1180,11 @@ function do_dictionary() {
     miss_count = 0;
     word_wt = 1;
     wt_chg = false;
-    dictionary.reset();
     //begin block 79
     hyf_min = left_hyphen_min + 1;
     hyf_max = right_hyphen_min + 1;
     hyf_len = hyf_min + hyf_max;
     //end block 79
-    //begin block 85
     if (procesp) {
         dot_min = pat_dot;
         dot_max = pat_len - pat_dot;
@@ -1216,9 +1202,6 @@ function do_dictionary() {
             good_dot = err_hyf;
             bad_dot = found_hyf;
         }
-    }
-    //end block 85
-    if (procesp) {
         init_count_trie();
         println("processing dictionary with pat_len " + pat_len + ", pat_dot = " + pat_dot);
     }
@@ -1408,7 +1391,8 @@ function doLevels(currLevel) {
         //logger.send("SIGHUP");
     }
 }
-var profiler = require('v8-profiler');
+
+
 function getGBT(currLevel) {
     var readline = require('readline'),
         rl = readline.createInterface(process.stdin, process.stdout),
@@ -1441,13 +1425,7 @@ function getGBT(currLevel) {
             bad_wt = n2;
             thresh = n3;
             rl.close();
-            profiler.startProfiling('1', true);
             generateLevel();
-            var profile1 = profiler.stopProfiling();
-            profile1.export(function (ignore, result) {
-                fs.writeFileSync('profile1.cpuprofile', result);
-                profile1.delete();
-            });
             doLevels(currLevel + 1);
         } else {
             println("Specify good weight, bad weight, threshold>=1 !");
