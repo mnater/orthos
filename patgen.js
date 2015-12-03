@@ -65,7 +65,7 @@
  *
  */
 
-/*jslint browser: false, node: true, es6: true, for: true, fudge: true*/
+/*jslint browser: false, node: true, es6: true*/
 "use strict";
 
 /**
@@ -78,30 +78,30 @@
 
 var fs = require("fs");
 
-var File = function (content) {
-    this.ptr = 0;
-    this.content = content;
-};
+function makeFile(content) {
+    var data = [0, content];
 
-File.prototype = {
-    eof: function () {
-        return this.ptr === this.content.length;
-    },
-    reset: function () {
-        this.ptr = 0;
-    },
-    read: function () {
-        var r = this.content.charAt(this.ptr);
-        this.ptr += 1;
+    function eof() {
+        return data[0] === data[1].length;
+    }
+
+    function reset() {
+        data[0] = 0;
+    }
+
+    function read() {
+        var r = data[1].charAt(data[0]);
+        data[0] += 1;
         return r;
-    },
-    write: function (data) {
-        this.content += data;
-    },
-    save: function (path) {
-        var that = this;
+    }
+
+    function write(s) {
+        data[1] += s;
+    }
+
+    function save(path) {
         return new Promise(function (resolve, reject) {
-            fs.writeFile(path, that.content, function (err) {
+            fs.writeFile(path, data[1], function (err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -111,7 +111,15 @@ File.prototype = {
         });
     }
 
-};
+    return {
+        data: data,
+        eof: eof,
+        reset: reset,
+        read: read,
+        write: write,
+        save: save
+    };
+}
 
 function readFilePromise(path) {
     return new Promise(function (resolve, reject) {
@@ -134,7 +142,7 @@ const patternInProm = readFilePromise(process.argv[3]);
 /**
  * Create output files
  */
-const patout = new File("");
+const patout = makeFile("");
 
 /**
  * variables for fullfilled file promises
@@ -377,18 +385,18 @@ var max_pat;//largest hyphenation value found in any pattern
 /**
  * Some helper functions
  */
-/*const
+const
     cp = require("child_process"),
-    logger = cp.fork("logger.js");*/
+    logger = cp.fork("logger.js");
 
 function print(s) {
-    //logger.send(s);
-    process.stdout.write(s);
+    logger.send(s);
+    //process.stdout.write(s);
 }
 
 function println(s) {
-    //logger.send(s + "\n");
-    process.stdout.write(s + "\n");
+    logger.send(s + "\n");
+    //process.stdout.write(s + "\n");
 }
 
 //block 10
@@ -466,10 +474,12 @@ function first_fit() {
         }
         // end block 37
         if (trie_taken[s] === 0) {
-            for (q = qmax; q >= 2; q -= 1) {
+            q = qmax;
+            while (q >= 2) {
                 if (trie_c[s + trieq_c[q]] !== 0) {
                     continueLoop = true;
                 }
+                q -= 1;
             }
         } else {
             continueLoop = true;
@@ -477,7 +487,8 @@ function first_fit() {
         doSearchLoop = continueLoop;
     }
     //end block 36
-    for (q = 1; q <= qmax; q += 1) {
+    q = 1;
+    while (q <= qmax) {
         t = s + trieq_c[q];
         trie_l[trie_r[t]] = trie_l[t];
         trie_r[trie_l[t]] = trie_r[t];
@@ -487,6 +498,7 @@ function first_fit() {
         if (t > trie_max) {
             trie_max = t;
         }
+        q += 1;
     }
     trie_taken[s] = 1;
     return s;
@@ -497,7 +509,8 @@ function unpack(s) {
     var c,
         t;
     qmax = 1;
-    for (c = cmin; c < cmax; c += 1) {
+    c = cmin;
+    while (c < cmax) {
         t = s + c;
         if (trie_c[t] === c) {
             trieq_c[qmax] = c;
@@ -510,18 +523,20 @@ function unpack(s) {
             trie_r[t] = 0;
             trie_c[t] = 0;
         }
+        c += 1;
     }
     trie_taken[s] = 0;
 }
 //block 34
 function init_pattern_trie() {
-    var c, //internal_code
-        h; //opt_type
-    for (c = 0; c <= cmax; c += 1) {
+    var c = 0, //internal_code
+        h = 1; //opt_type
+    while (c <= cmax) {
         trie_c[trie_root + c] = c;
         trie_l[trie_root + c] = 0;
         trie_r[trie_root + c] = 0;
         trie_taken[trie_root + c] = 0;
+        c += 1;
     }
     trie_taken[trie_root] = 1;
     trie_bmax = trie_root;
@@ -530,8 +545,9 @@ function init_pattern_trie() {
     qmax_thresh = 5;
     trie_l[0] = trie_max + 1;
     trie_r[trie_max + 1] = 0;
-    for (h = 1; h <= max_ops; h += 1) {
-        ops[h] = {val: 0};
+    while (h <= max_ops) {
+        ops[h] = {val: 0, dot: 0, op: 0};
+        h += 1;
     }
     op_count = 0;
 }
@@ -617,12 +633,13 @@ function insert_pattern(val, dot) {
 
 
 function init_count_trie() {
-    var c;
-    for (c = 0; c <= cmax; c += 1) {
+    var c = 0;
+    while (c <= cmax) {
         triec_c[triec_root + c] = c;
         triec_l[triec_root + c] = 0;
         triec_r[triec_root + c] = 0;
         triec_taken[triec_root + c] = 0;
+        c += 1;
     }
     triec_taken[triec_root] = 1;
     triec_bmax = triec_root;
@@ -672,10 +689,12 @@ function firstc_fit() {
         }
         //end block 47
         if (triec_taken[b] === 0) {
-            for (q = qmax; q >= 2; q -= 1) {
+            q = qmax;
+            while (q >= 2) {
                 if (triec_c[b + trieq_c[q]] !== 0) {
                     continueLoop = true;
                 }
+                q -= 1;
             }
         } else {
             continueLoop = true;
@@ -683,7 +702,8 @@ function firstc_fit() {
         doSearchLoop = continueLoop;
     }
     //end block 46
-    for (q = 1; q <= qmax; q += 1) {
+    q = 1;
+    while (q <= qmax) {
         a = b + trieq_c[q];
         triec_l[triec_r[a]] = triec_l[a];
         triec_r[triec_l[a]] = triec_r[a];
@@ -693,6 +713,7 @@ function firstc_fit() {
         if (a > triec_max) {
             triec_max = a;
         }
+        q += 1;
     }
     triec_taken[b] = 1;
     return b;
@@ -700,10 +721,10 @@ function firstc_fit() {
 
 //block 48
 function unpackc(b) {
-    var c,
+    var c = cmin,
         a;
     qmax = 1;
-    for (c = cmin; c <= cmax; c += 1) {
+    while (c <= cmax) {
         a = b + c;
         if (triec_c[a] === c) {
             trieq_c[qmax] = c;
@@ -716,6 +737,7 @@ function unpackc(b) {
             triec_r[a] = 0;
             triec_c[a] = 0;
         }
+        c += 1;
     }
     triec_taken[b] = 0;
 }
@@ -776,7 +798,7 @@ function insertc_pat(fpos) {
 }
 
 //block 51
-var pattmp = new File("");
+var pattmp = makeFile("");
 
 //block 52
 var buf = [],
@@ -796,11 +818,11 @@ function bad_input(msg) {
 function read_buf(file) {
     buf = [];
     do {
-        buf.push(file.content[file.ptr]);
-        file.ptr += 1;
-    } while (file.content[file.ptr] !== "\n");
+        buf.push(file.data[1][file.data[0]]);
+        file.data[0] += 1;
+    } while (file.data[1][file.data[0]] !== "\n");
     buf_len = buf.length;
-    file.ptr += 1;
+    file.data[0] += 1;
 }
 
 
@@ -808,14 +830,14 @@ function read_buf(file) {
 
 //block 61
 function find_letters(b, i) {
-    var c,
+    var c = cmin,
         a,
         j,
         l;
     if (i === 0) {
         init_count_trie();
     }
-    for (c = cmin; c <= cmax; c += 1) {
+    while (c <= cmax) {
         a = b + c;
         if (trie_c[a] === c) {
             pat[i] = c;
@@ -824,7 +846,8 @@ function find_letters(b, i) {
             } else if (trie_l[a] === 0) {
                 //begin block 62
                 l = triec_root + trie_r[a];
-                for (j = 1; j <= i - 1; j += 1) {
+                j = 1;
+                while (j <= i - 1) {
                     if (triec_max === triec_size) {
                         overflow(triec_size + " count trie nodes (fl)");
                     }
@@ -832,11 +855,13 @@ function find_letters(b, i) {
                     triec_l[l] = triec_max;
                     l = triec_max;
                     triec_c[l] = pat[j];
+                    j += 1;
                 }
                 triec_l[l] = 0;
                 //end block 62
             }
         }
+        c += 1;
     }
 }
 
@@ -844,9 +869,9 @@ function find_letters(b, i) {
 
 //block 64
 function traverse_count_trie(b, i) {
-    var c,
+    var c = cmin,
         a;
-    for (c = cmin; c <= cmax; c += 1) {
+    while (c <= cmax) {
         a = b + c;
         if (triec_c[a] === c) {
             pat[i] = c;
@@ -871,6 +896,7 @@ function traverse_count_trie(b, i) {
                 //end block 65
             }
         }
+        c += 1;
     }
 }
 
@@ -900,13 +926,13 @@ function collect_count_trie() {
 
 //block 68
 function delete_patterns(s) {
-    var c,
+    var c = cmin,
         t,
         all_freed,
         h,
         n;
     all_freed = true;
-    for (c = cmin; c <= cmax; c += 1) {
+    while (c <= cmax) {
         t = s + c;
         if (trie_c[t] === c) {
             //begin block 69
@@ -939,6 +965,7 @@ function delete_patterns(s) {
                 //end block 70
             }
         }
+        c += 1;
     }
     if (all_freed) {
         trie_taken[s] = 0;
@@ -951,15 +978,16 @@ function delete_patterns(s) {
 function delete_bad_patterns() {
     var old_op_count,
         old_trie_count,
-        h;
+        h = 1;
     old_op_count = op_count;
     old_trie_count = trie_count;
     delete_patterns(trie_root);
-    for (h = 1; h <= max_ops; h += 1) {
+    while (h <= max_ops) {
         if (ops[h].val === max_val) {
             ops[h].val = 0;
             op_count -= 1;
         }
+        h += 1;
     }
     println((old_trie_count - trie_count) + " nodes and " + (old_op_count - op_count) + " outputs deleted");
     qmax_thresh = 7;
@@ -968,19 +996,21 @@ function delete_bad_patterns() {
 //block 72
 function output_patterns(s, pat_len, indent) {
     indent = indent || 0;
-    var c,
+    var c = cmin,
         t,
         h,
         d;
-    for (c = cmin; c <= cmax; c += 1) {
+    while (c <= cmax) {
         t = s + c;
         if (trie_c[t] === c) {
             pat[pat_len] = c;
             h = trie_r[t];
             if (h > 0) {
                 //begin block 73
-                for (d = 0; d <= pat_len; d += 1) {
+                d = 0;
+                while (d <= pat_len) {
                     hval[d] = 0;
+                    d += 1;
                 }
                 do {
                     d = ops[h].dot;
@@ -992,11 +1022,13 @@ function output_patterns(s, pat_len, indent) {
                 if (hval[0] > 0) {
                     patout.write(xdig[hval[0]]);
                 }
-                for (d = 1; d <= pat_len; d += 1) {
+                d = 1;
+                while (d <= pat_len) {
                     patout.write(xext[pat[d]]);
                     if (hval[d] > 0) {
                         patout.write(xdig[hval[d]]);
                     }
+                    d += 1;
                 }
                 patout.write("\n");
                  //end block 73
@@ -1005,11 +1037,14 @@ function output_patterns(s, pat_len, indent) {
                 output_patterns(trie_l[t], pat_len + 1, indent + 4);
             }
         }
+        c += 1;
     }
 }
+
+
 //block 76
 function read_word() {
-    var cc = dictionary.content.charCodeAt(dictionary.ptr),
+    var cc = dictionary.data[1].charCodeAt(dictionary.data[0]),
         c;
     word[1] = edge_of_word;
     wlen = 1;
@@ -1039,24 +1074,24 @@ function read_word() {
             bad_input("Bad character");
             break;
         }
-        dictionary.ptr += 1;
-        cc = dictionary.content.charCodeAt(dictionary.ptr);
+        dictionary.data[0] += 1;
+        cc = dictionary.data[1].charCodeAt(dictionary.data[0]);
     }
-    dictionary.ptr += 1;
     wlen += 1;
     word[wlen] = edge_of_word;
+    dictionary.data[0] += 1;
 }
 
 //block 77
 function hyphenate() {
-    var spos = 0,
+    var spos = wlen - hyf_max,
         dpos = 0,
         fpos = 0,
         t,
         h,
         v;
 
-    for (spos = wlen - hyf_max; spos >= 0; spos -= 1) {
+    while (spos >= 0) {
         no_more[spos] = 0;
         hval[spos] = 0;
         fpos = spos + 1;
@@ -1070,10 +1105,8 @@ function hyphenate() {
                 if (v < max_val && hval[dpos] < v) {
                     hval[dpos] = v;
                 }
-                if (v >= hyph_level) {
-                    if ((fpos - pat_len) <= (dpos - pat_dot) && (dpos - pat_dot) <= spos) {
-                        no_more[dpos] = 1;
-                    }
+                if (v >= hyph_level && (fpos - pat_len) <= (dpos - pat_dot) && (dpos - pat_dot) <= spos) {
+                    no_more[dpos] = 1;
                 }
                 h = ops[h].op;
                 //end block 80
@@ -1085,35 +1118,41 @@ function hyphenate() {
             fpos += 1;
             t += word[fpos];
         }
+        spos -= 1;
     }
 }
 
 //block 81
 function change_dots() {
-    var dpos;
-    for (dpos = wlen - hyf_max; dpos >= hyf_min; dpos -= 1) {
+    var dpos = wlen - hyf_max;
+    while (dpos >= hyf_min) {
         if ((hval[dpos] % 2) === 1) {
             dots[dpos] += 1;
         }
-        if (dots[dpos] === found_hyf) {
+        switch (dots[dpos]) {
+        case found_hyf:
             good_count += dotw[dpos];
-        } else if (dots[dpos] === err_hyf) {
+            break;
+        case err_hyf:
             bad_count += dotw[dpos];
-        } else if (dots[dpos] === is_hyf) {
+            break;
+        case is_hyf:
             miss_count += dotw[dpos];
+            break;
         }
+        dpos -= 1;
     }
 }
 
 
 //bloch 82
 function output_hyphenated_word() {
-    var dpos;
+    var dpos = 2;
     if (wt_chg) {
         pattmp.write(xdig[word_wt]);
         wt_chg = false;
     }
-    for (dpos = 2; dpos <= wlen - 2; dpos += 1) {
+    while (dpos <= wlen - 2) {
         pattmp.write(xext[word[dpos]]);
         if (dots[dpos] !== no_hyf) {
             pattmp.write(xext[dots[dpos]]);
@@ -1121,6 +1160,7 @@ function output_hyphenated_word() {
         if (dotw[dpos] !== word_wt) {
             pattmp.write(xdig[dotw[dpos]]);
         }
+        dpos += 1;
     }
     pattmp.write(xext[word[wlen - 1]] + "\n");
 }
@@ -1130,15 +1170,13 @@ function do_word() {
     var spos,
         dpos = wlen - dot_max,
         fpos,
-        a,
-        goodp;
+        a;
     while (dpos >= dot_min) {
         spos = dpos - pat_dot;
         fpos = spos + pat_len;
         //begin block 86
         if (no_more[dpos] === 0) {
             if (dots[dpos] === good_dot) {
-                goodp = true;
                 spos += 1;
                 a = triec_root + word[spos];
                 while (spos < fpos) {
@@ -1151,7 +1189,6 @@ function do_word() {
                 }
                 triec_l[a] += dotw[dpos];
             } else if (dots[dpos] === bad_dot) {
-                goodp = false;
                 spos += 1;
                 a = triec_root + word[spos];
                 while (spos < fpos) {
@@ -1169,9 +1206,6 @@ function do_word() {
         dpos -= 1;
     }
 }
-
-
-
 
 //block 88
 function do_dictionary() {
@@ -1206,7 +1240,7 @@ function do_dictionary() {
         println("processing dictionary with pat_len " + pat_len + ", pat_dot = " + pat_dot);
     }
     if (hyphp) {
-        filnam = `pattmp.${hyph_level + 1}`;
+        filnam = "pattmp." + (hyph_level + 1);
         println("writing " + filnam);
     }
     //begin block 89
@@ -1229,9 +1263,8 @@ function do_dictionary() {
         }
     }
     //end block 89
-    //r.close(dictionary);
     println(" ");
-    println(good_count + " good, " + bad_count + " bad, " + miss_count + " missed");
+    println(Number(good_count).toString() + " good, " + Number(bad_count).toString() + " bad, " + Number(miss_count).toString() + " missed");
     if ((good_count + miss_count) > 0) {
         println(Number(100 * good_count / (good_count + miss_count)).toFixed(2) + " %, " + Number(100 * bad_count / (good_count + miss_count)).toFixed(2) + " %, " + Number(100 * miss_count / (good_count + miss_count)).toFixed(2) + " %");
     }
@@ -1254,8 +1287,6 @@ function read_patterns() {
     var c,
         d,
         i;
-    xclass["."] = letter_class;
-    xint["."] = edge_of_word;
     level_pattern_count = 0;
     max_pat = 0;
     patterns.reset();
@@ -1292,7 +1323,8 @@ function read_patterns() {
         //end block 92
         //block 93
         if (pat_len > 0) {
-            for (i = 0; i <= pat_len; i += 1) {
+            i = 0;
+            while (i <= pat_len) {
                 if (hval[i] !== 0) {
                     insert_pattern(hval[i], i);
                 }
@@ -1303,6 +1335,7 @@ function read_patterns() {
                         }
                     }
                 }
+                i += 1;
             }
         }
     }
@@ -1316,14 +1349,16 @@ function read_patterns() {
 function generateLevel() {
     //block 95
     var j,
-        k,
+        k = 0,
         dot1,
         more_this_level = [];
     //generate a level 96
-    for (k = 0; k <= max_dot; k += 1) {
+    while (k <= max_dot) {
         more_this_level[k] = true;
+        k += 1;
     }
-    for (j = pat_start; j <= pat_finish; j += 1) {
+    j = pat_start;
+    while (j <= pat_finish) {
         pat_len = j;
         pat_dot = ~~(pat_len / 2); //integer division
         dot1 = pat_dot * 2;
@@ -1336,11 +1371,14 @@ function generateLevel() {
                 more_this_level[pat_dot] = more_to_come;
             }
         } while (pat_dot !== pat_len);
-        for (k = max_dot; k <= 1; k -= 1) {
+        k = max_dot;
+        while (k <= 1) {
             if (!more_this_level[k - 1]) {
                 more_this_level[k] = false;
             }
+            k -= 1;
         }
+        j += 1;
     }
     //end block 96
     delete_bad_patterns();
@@ -1358,7 +1396,9 @@ function askDoDictionary() {
         if (chunk === "y" || chunk === "Y") {
             rl.close();
             do_dictionary();
+            logger.send("SIGHUP");
         } else {
+            logger.send("SIGHUP");
             process.exit(0);
         }
     });
@@ -1388,11 +1428,10 @@ function doLevels(currLevel) {
         procesp = false;
         hyphp = true;
         askDoDictionary();
-        //logger.send("SIGHUP");
     }
 }
 
-
+var profiler = require("v8-profiler");
 function getGBT(currLevel) {
     var readline = require('readline'),
         rl = readline.createInterface(process.stdin, process.stdout),
@@ -1425,7 +1464,14 @@ function getGBT(currLevel) {
             bad_wt = n2;
             thresh = n3;
             rl.close();
+            profiler.startProfiling("generateLevel", true);
             generateLevel();
+            var profile1 = profiler.stopProfiling();
+            profile1.export(function (ignore, result) {
+                fs.writeFileSync('profile1.cpuprofile', result);
+                profile1.delete();
+            });
+
             doLevels(currLevel + 1);
         } else {
             println("Specify good weight, bad weight, threshold>=1 !");
@@ -1516,6 +1562,9 @@ function main() {
     getHyph();
 }
 
+/**
+ * Collect characters used in dictionary and extend xext, xint and xclass
+ */
 function collectAndSetChars() {
     var charsS = new Set(),
         charsA,
@@ -1523,11 +1572,11 @@ function collectAndSetChars() {
     dictionary.reset();
     println("collecting chars…");
     while (!dictionary.eof()) {
-        cc = dictionary.content.charCodeAt(dictionary.ptr);
+        cc = dictionary.data[1].charCodeAt(dictionary.data[0]);
         if (cc === 45 || cc >= 65) {
             charsS.add(cc);
         }
-        dictionary.ptr += 1;
+        dictionary.data[0] += 1;
     }
     charsA = Array.from(charsS);
     charsA.sort((a, b) => a - b);
@@ -1611,12 +1660,11 @@ function init() {
     getLeftRightHyphenMin();
 }
 
-
+//When filereading promises are fullfilled, start computations
 Promise.all([dictionaryProm, patternInProm]).then(
     function (values) {
-        dictionary = new File(values[0]);
-        patterns = new File(values[1]);
-        //translate = new File(values[2]);
+        dictionary = makeFile(values[0]);
+        patterns = makeFile(values[1]);
         init();
     }
 ).catch(
