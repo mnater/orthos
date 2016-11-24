@@ -405,7 +405,7 @@ var max_pat;//largest hyphenation value found in any pattern
  * Some helper functions
  */
 const cp = require("child_process");
-const logger = cp.fork("logger.js");
+const logger = cp.fork(require("path").resolve(__dirname, "logger.js"));
 
 function print(s) {
     logger.send(s);
