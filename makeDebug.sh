@@ -12,4 +12,4 @@ touch pattern.0
                                  "2 5" \
                                  "1 1 1" \
                                  "y" \
- | node patgen.js ${DICT} pattern.0 pattern.1
+ | node orthos.js ${DICT} pattern.0 pattern.1

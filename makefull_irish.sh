@@ -19,7 +19,7 @@
 #          pattern.rules      Die patgen-Parameter in kompakter Form.
 #
 
-DICT="./wortliste_extr.txt"
+DICT="./irish_wl.txt"
 
 # Die Parameter für patgen für die Level eins bis acht.
 
