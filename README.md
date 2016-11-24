@@ -1,8 +1,9 @@
 # orthos.js - Pattern Generator for hyphenation patterns in node.js
 
 ## USAGE
-(install node version 5.1.0 or newer)
-node orthos.js <wortliste> <pattern-in> <pattern-out>
+(make sure node version 5.1.0 or newer is installed)
+
+`node orthos.js <wordlist> <pattern-in> <pattern-out>`
 
 ## HISTORY
 patgen (PATtern GENeration program for the TEX82 hyphenator) was originally
