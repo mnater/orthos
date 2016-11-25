@@ -1642,16 +1642,7 @@ function getLeftRightHyphenMin() {
 
     rl.on("line", function (line) {
         line = line.trim();
-        var chunks = [];
-        if (line.length === 3) {
-            chunks.push(line.slice(0, 1));
-            chunks.push(line.slice(1));
-        } else if (line.length === 4) {
-            chunks.push(line.slice(0, 2));
-            chunks.push(line.slice(2));
-        } else {
-            chunks = [0, 0];
-        }
+        var chunks = line.trim().split(" ");
         if (chunks.length >= 2) {
             n1 = parseInt(chunks[0], 10);
             n2 = parseInt(chunks[1], 10);
