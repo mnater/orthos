@@ -1455,7 +1455,7 @@ function doLevels(currLevel) {
     }
 }
 
-//var profiler = require("v8-profiler");
+var profiler = require("v8-profiler");
 function getGBT(currLevel) {
     var readline = require("readline");
     var rl = readline.createInterface(process.stdin, process.stdout);
@@ -1488,13 +1488,13 @@ function getGBT(currLevel) {
             bad_wt = n2;
             thresh = n3;
             rl.close();
-            //profiler.startProfiling("generateLevel", true);
+            profiler.startProfiling("generateLevel", true);
             generateLevel();
-            /*var profile1 = profiler.stopProfiling();
+            var profile1 = profiler.stopProfiling();
             profile1.export(function (ignore, result) {
-                fs.writeFileSync("profile1.cpuprofile", result);
+                fs.writeFileSync("profile" + currLevel + ".cpuprofile", result);
                 profile1.delete();
-            });*/
+            });
 
             doLevels(currLevel + 1);
         } else {
@@ -1578,14 +1578,6 @@ function getHyph() {
 }
 
 
-function main() {
-    init_pattern_trie();
-    read_patterns();
-    procesp = true;
-    hyphp = false;
-    getHyph();
-}
-
 /**
  * Collect characters used in dictionary and extend xext, xint and xclass
  */
@@ -1629,7 +1621,15 @@ function collectAndSetChars() {
     xdig = xext.slice(0, 10);
     cmax = xext.length - 1;
     cnum = xext.length;
-    main();
+}
+
+function main() {
+    collectAndSetChars();
+    init_pattern_trie();
+    read_patterns();
+    procesp = true;
+    hyphp = false;
+    getHyph();
 }
 
 function getLeftRightHyphenMin() {
@@ -1660,7 +1660,7 @@ function getLeftRightHyphenMin() {
             left_hyphen_min = n1;
             right_hyphen_min = n2;
             rl.close();
-            collectAndSetChars();
+            main();
         } else {
             rl.close();
             println("Specify 1<=left_hyphen_min,right_hyphen_min<=15 !");
