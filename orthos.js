@@ -259,7 +259,7 @@ var edge_of_word;
  * Thus we traverse the dictionary at the beginning and collect all characters,
  * map them to a internalCharCode and assign them a class.
  *
- * xint: char -> internalCharCode
+ * xint: charCode -> internalCharCode
  * xext: internalCharCode -> char
  * xdig: value -> digit
  * xclass: char -> one of the following classes:
@@ -433,30 +433,31 @@ function overflow(msg1) {
 function initialize() {
     //setup internal representation for digits
     String("0123456789").split("").forEach(function (c, i) {
-        xext[i] = c;
-        xint[c] = i;
-        xclass[c] = digit_class;
+        var cc = c.charCodeAt(0);
+        xext[i] = String.fromCharCode(cc);
+        xint[cc] = i;
+        xclass[cc] = digit_class;
     });
     //setup IR for ".": the edge_of_word marker (can occur in pattern files)
     xext[10] = ".";
-    xint["."] = 10;
-    xclass["."] = letter_class;
+    xint[46] = 10;
+    xclass[46] = letter_class;
     edge_of_word = 10;
 
     //setup IR for "#": the err_hyf marker
     xext[11] = "#";
-    xint["#"] = 11;
-    xclass["#"] = hyf_class;
+    xint[35] = 11;
+    xclass[35] = hyf_class;
 
     //setup IR for "-": the is_hyf marker (occurs in dictionary)
     xext[12] = "-";
-    xint["-"] = 12;
-    xclass["-"] = hyf_class;
+    xint[45] = 12;
+    xclass[45] = hyf_class;
 
     //setup IR for "*": the found_hyf marker
     xext[13] = "*";
-    xint["*"] = 13;
-    xclass["*"] = hyf_class;
+    xint[42] = 13;
+    xclass[42] = hyf_class;
 }
 
 
@@ -1061,29 +1062,27 @@ function output_patterns(s, pat_len, indent) {
 //block 76
 function read_word() {
     var cc = dictionary.data[1].charCodeAt(dictionary.data[0]);
-    var c;
     word[1] = edge_of_word;
     wlen = 1;
     while (cc !== 10) {
-        c = String.fromCharCode(cc);
-        switch (xclass[c]) {
+        switch (xclass[cc]) {
         case letter_class:
             wlen += 1;
-            word[wlen] = xint[c];
+            word[wlen] = xint[cc];
             dots[wlen] = no_hyf;
             dotw[wlen] = word_wt;
             break;
         case hyf_class:
-            dots[wlen] = xint[c];
+            dots[wlen] = xint[cc];
             break;
         case digit_class:
             if (wlen === 1) {
-                if (xint[c] !== word_wt) {
+                if (xint[cc] !== word_wt) {
                     wt_chg = true;
-                    word_wt = xint[c];
+                    word_wt = xint[cc];
                 }
             } else {
-                dotw[wlen] = xint[c];
+                dotw[wlen] = xint[cc];
             }
             break;
         default:
@@ -1308,7 +1307,7 @@ function do_dictionary() {
 
 //block 90
 function read_patterns() {
-    var c;
+    var cc;
     var d;
     var i;
     level_pattern_count = 0;
@@ -1322,10 +1321,10 @@ function read_patterns() {
         buf_ptr = 0;
         hval[0] = 0;
         while (buf_ptr < buf_len) {
-            c = buf[buf_ptr];
-            switch (xclass[c]) {
+            cc = buf[buf_ptr].charCodeAt(0);
+            switch (xclass[cc]) {
             case digit_class:
-                d = xint[c];
+                d = xint[cc];
                 if (d >= max_val) {
                     bad_input("Bad hyphenation value");
                 }
@@ -1337,10 +1336,10 @@ function read_patterns() {
             case letter_class:
                 pat_len += 1;
                 hval[pat_len] = 0;
-                pat[pat_len] = xint[c];
+                pat[pat_len] = xint[cc];
                 break;
             default:
-                bad_input("Bad character: ", c);
+                bad_input("Bad character: ", String.fromCharCode(cc));
             }
             buf_ptr += 1;
         }
@@ -1598,23 +1597,23 @@ function collectAndSetChars() {
     charsA.sort((a, b) => a - b);
     charsA.forEach(function setChar(cc) {
         var c = String.fromCharCode(cc);
-        var i = xint[c];
+        var i = xint[cc];
         if (i === undefined) {
             if (c === c.toUpperCase()) {
                 //c is upperCase -> try lowerCase
-                i = xint[c.toLowerCase()];
-            } else {
+                i = xint[c.toLowerCase().charCodeAt(0)];
+            } else if (c.toUpperCase().length === 1) { //test for length is necessary because "ß".toUpperCase() -> "SS"
                 //c ist lowerCase -> try upperCase
-                i = xint[c.toUpperCase()];
+                i = xint[c.toUpperCase().charCodeAt(0)];
             }
             if (i === undefined) {
                 i = xext.push(c.toLowerCase()) - 1;
-                xint[c] = i;
-                xclass[c] = letter_class;
+                xint[cc] = i;
+                xclass[cc] = letter_class;
             } else {
                 //other case already exists:
-                xint[c] = i;
-                xclass[c] = letter_class;
+                xint[cc] = i;
+                xclass[cc] = letter_class;
             }
         }
     });
