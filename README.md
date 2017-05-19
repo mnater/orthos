@@ -5,6 +5,13 @@
 
 `node orthos.js <wordlist> <pattern-in> <pattern-out>`
 
+`<wordlist>` is a UTF-8 encoded file containing hyphenated words (by `-`), separated by linebreaks.
+`<pattern-in>` is a pattern-file from a previous level (or an empty file for the first level.
+`<pattern-out>` is the file where the patterns will be stored.
+
+Example:
+`node orthos.js wordlist.txt pattern.0 pattern.1`
+
 ## HISTORY
 patgen (PATtern GENeration program for the TEX82 hyphenator) was originally
 written by Frank Liang in PASCAL in 1983 and had revisions in 1991, 1992

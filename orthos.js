@@ -1454,7 +1454,7 @@ function doLevels(currLevel) {
     }
 }
 
-var profiler = require("v8-profiler");
+//var profiler = require("v8-profiler");
 function getGBT(currLevel) {
     var readline = require("readline");
     var rl = readline.createInterface(process.stdin, process.stdout);
@@ -1487,13 +1487,13 @@ function getGBT(currLevel) {
             bad_wt = n2;
             thresh = n3;
             rl.close();
-            profiler.startProfiling("generateLevel", true);
+            //profiler.startProfiling("generateLevel", true);
             generateLevel();
-            var profile1 = profiler.stopProfiling();
+            /*var profile1 = profiler.stopProfiling();
             profile1.export(function (ignore, result) {
                 fs.writeFileSync("profile" + currLevel + ".cpuprofile", result);
                 profile1.delete();
-            });
+            });*/
 
             doLevels(currLevel + 1);
         } else {
