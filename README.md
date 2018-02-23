@@ -56,7 +56,7 @@ Why the name orthos.js?
 There's no licence available for patgen. If there would it would most probably
 be LPPL (https://www.latex-project.org/lppl/). So just to make sure I had to
 give this another name than "patgen".
-Then, there is "hydra" (https://github.com/hyphenation/hydra) a Ruby port of
+Then, there is "hydra" (https://github.com/hyphenation/hydra): a Ruby port of
 patgen. Orthos was the brother of Hydra.
 And may be some day there will be a hero that kills both…
 
@@ -64,7 +64,7 @@ And may be some day there will be a hero that kills both…
 Please report errors on [githublink]
 
 ## LICENCE
-Copyright (c) <year> <copyright holders>
+Copyright (c) 2017 Mathias Nater
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
