@@ -191,19 +191,19 @@ const banner = "This is orthos.js for node.js, Version 1.0b";
  * space for pattern trie
  * originally this was 55000, but that's to small for the german dictionary
  */
-const trie_size = 55000 * 8;
+const trie_size = 55000 * 80;
 
 /**
  * space for pattern count trie, must be less than trie_size and greater
  * than the number of occurrences of any pattern in the dictionary
  * originally this was 26000, but that's to small for the german dictionary
  */
-const triec_size = 32000 * 8;
+const triec_size = 32000 * 80;
 
 /**
  * size of output hash table, should be a multiple of 510 (= 2*255)
  */
-const max_ops = 4080;
+const max_ops = 510 * 10;
 
 /**
  * maximum number of levels+1, also used to denote bad patterns
@@ -527,7 +527,7 @@ function unpack(s) {
     var t;
     qmax = 1;
     c = cmin;
-    while (c < cmax) {
+    while (c <= cmax) {
         t = s + c;
         if (trie_c[t] === c) {
             trieq_c[qmax] = c;
@@ -901,7 +901,7 @@ function traverse_count_trie(b, i) {
                     insert_pattern(max_val, pat_dot);
                     bad_pat_count += 1;
                 } else if ((good_wt * triec_l[a] - bad_wt * triec_r[a]) >= thresh) { //good pattern
-                    //println("INSERT:", pat.map(v => xext[v]), triec_l[a], triec_r[a]);
+                    //println(`INSERT: ${pat.map(v => xext[v])}, ${triec_l[a]}, ${triec_r[a]}`);
                     insert_pattern(hyph_level, pat_dot);
                     good_pat_count += 1;
                     good_count += triec_l[a];
@@ -1622,7 +1622,7 @@ function collectAndSetChars() {
     cnum = xext.length;
 }
 
-function main() {
+function main() {
     collectAndSetChars();
     init_pattern_trie();
     read_patterns();
